@@ -1,0 +1,103 @@
+ # =========================
+  # Build directories
+  # =========================
+  build/
+  build-*/
+  cmake-build-*/
+  out/
+  Debug/
+  Release/
+  x64/
+  x86/
+
+  # CMake
+  CMakeCache.txt
+  CMakeFiles/
+  cmake_install.cmake
+  compile_commands.json
+  CTestTestfile.cmake
+  Testing/
+  Makefile
+  build.ninja
+  .ninja_deps
+  .ninja_log
+
+  # =========================
+  # STM32 / embedded outputs
+  # =========================
+  *.o
+  *.obj
+  *.d
+  *.su
+  *.map
+  *.elf
+  *.axf
+  *.bin
+  *.hex
+  *.list
+  *.srec
+  *.lnp
+  *.dep
+
+  # Linker / generated reports
+  *.lst
+  *.log
+
+  # =========================
+  # IDE / editor
+  # =========================
+  .vscode/
+  .idea/
+  .clion/
+  .settings/
+  .project
+  .cproject
+  .metadata/
+  *.launch
+  *.code-workspace
+
+  # Codex / Claude
+  .claude/
+
+  # =========================
+  # OS files
+  # =========================
+  .DS_Store
+  Thumbs.db
+  desktop.ini
+
+  # =========================
+  # Python
+  # =========================
+  __pycache__/
+  *.pyc
+  *.pyo
+  *.pyd
+  .venv/
+  venv/
+  env/
+
+  # =========================
+  # Temporary / backup
+  # =========================
+  *.tmp
+  *.temp
+  *.bak
+  *.swp
+  *.swo
+  *~
+  *.orig
+
+  # =========================
+  # Archives
+  # =========================
+  *.zip
+  *.7z
+  *.rar
+  *.tar
+  *.gz
+
+  # =========================
+  # Documents
+  # =========================
+  *.pdf
