@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmake -B build -DCMAKE_TOOLCHAIN_FILE=gcc-arm-none-eabi.cmake)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":61234\\\\|:61235\")",
+      "Bash(powershell.exe -Command \"Get-NetTCPConnection -LocalPort 61234,61235 -ErrorAction SilentlyContinue | Select-Object LocalPort,OwningProcess | Format-Table -AutoSize\")",
+      "Bash(powershell.exe -Command \"Get-Process -Name 'ST-LINK_gdbserver','ST-LINK*','stlink*' -ErrorAction SilentlyContinue | Format-Table Id,Name,CPU -AutoSize\")",
+      "Bash(powershell.exe -Command \"Stop-Process -Id 21780 -Force; Write-Output 'killed'\")",
+      "Bash(cmake --build .)",
+      "Bash(where cmake *)",
+      "Read(//usr/local/bin/**)",
+      "Bash(\"/c/Users/15370/.vscode/extensions/stmicroelectronics.stm32cube-ide-build-cmake-1.44.0-win32-x64/resources/cube-cmake/win32/x86_64/cmake.exe\" --build \"d:/ALL_Project/diansai/shared/nrf-OLEDtest/build/Debug\")",
+      "Bash(cmake --build build)",
+      "Bash(/c/Users/15370/AppData/Local/stm32cube/bundles/ninja/1.13.2+st.1/bin/ninja.exe)",
+      "Bash(powershell.exe -Command \"Get-NetTCPConnection -LocalPort 61234,61235 -ErrorAction SilentlyContinue | Select-Object LocalAddress,LocalPort,State,OwningProcess | Format-Table\")",
+      "Bash(powershell.exe -Command \"netstat -ano | Select-String '61234|61235'\")",
+      "Bash(powershell.exe -Command \"Get-Process | Select-Object Name,Id | Format-Table\")",
+      "Bash(powershell.exe -Command \"netsh int ipv4 show excludedportrange protocol=tcp\")",
+      "Bash(powershell.exe -Command \"Get-Process -Id 14916 | Select-Object Name,Id,Path,StartTime | Format-List\")",
+      "Bash(powershell.exe -Command \"netstat -ano\")",
+      "Bash(/c/Users/15370/AppData/Local/stm32cube/bundles/stlink-gdbserver/7.13.0+st.3/bin/ST-LINK_gdbserver.exe --help)",
+      "Bash(timeout 3 /c/Users/15370/AppData/Local/stm32cube/bundles/stlink-gdbserver/7.13.0+st.3/bin/ST-LINK_gdbserver.exe -p 61234 -z 61235)",
+      "Bash(timeout 5 /c/Users/15370/AppData/Local/stm32cube/bundles/stlink-gdbserver/7.13.0+st.3/bin/ST-LINK_gdbserver.exe -p 61234 -z 61235 -cp /c/Users/15370/AppData/Local/stm32cube/bundles/programmer/2.22.0+st.1/bin)",
+      "Bash(python3 -c ' *)",
+      "Bash(grep -o '.\\\\{0,100\\\\}stlinkUpgrad.\\\\{0,100\\\\}' /c/Users/15370/.vscode/extensions/stmicroelectronics.stm32cube-ide-debug-core-1.2.2/lib/extension.js)",
+      "Bash(grep -o '.\\\\{0,150\\\\}st-link-upgrader.\\\\{0,150\\\\}' /c/Users/15370/.vscode/extensions/stmicroelectronics.stm32cube-ide-debug-core-1.2.2/lib/extension.js)",
+      "Bash(grep -o '.\\\\{0,300\\\\}isSTLinkFirmwareUpgrad.\\\\{0,300\\\\}' /c/Users/15370/.vscode/extensions/stmicroelectronics.stm32cube-ide-debug-core-1.2.2/lib/extension.js)",
+      "Bash(grep -o '.\\\\{0,500\\\\}sFt.\\\\{0,1000\\\\}' /c/Users/15370/.vscode/extensions/stmicroelectronics.stm32cube-ide-debug-core-1.2.2/lib/extension.js)"
+    ]
+  }
+}
