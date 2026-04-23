@@ -26,7 +26,12 @@
       "Bash(grep -o '.\\\\{0,100\\\\}stlinkUpgrad.\\\\{0,100\\\\}' /c/Users/15370/.vscode/extensions/stmicroelectronics.stm32cube-ide-debug-core-1.2.2/lib/extension.js)",
       "Bash(grep -o '.\\\\{0,150\\\\}st-link-upgrader.\\\\{0,150\\\\}' /c/Users/15370/.vscode/extensions/stmicroelectronics.stm32cube-ide-debug-core-1.2.2/lib/extension.js)",
       "Bash(grep -o '.\\\\{0,300\\\\}isSTLinkFirmwareUpgrad.\\\\{0,300\\\\}' /c/Users/15370/.vscode/extensions/stmicroelectronics.stm32cube-ide-debug-core-1.2.2/lib/extension.js)",
-      "Bash(grep -o '.\\\\{0,500\\\\}sFt.\\\\{0,1000\\\\}' /c/Users/15370/.vscode/extensions/stmicroelectronics.stm32cube-ide-debug-core-1.2.2/lib/extension.js)"
+      "Bash(grep -o '.\\\\{0,500\\\\}sFt.\\\\{0,1000\\\\}' /c/Users/15370/.vscode/extensions/stmicroelectronics.stm32cube-ide-debug-core-1.2.2/lib/extension.js)",
+      "Bash(cmake -B build -G Ninja)",
+      "Bash(where arm-none-eabi-gcc *)",
+      "Bash(export PATH=\"$TOOLCHAIN:$NINJA:$PATH\")",
+      "Bash(/c/Users/15370/.vscode/extensions/stmicroelectronics.stm32cube-ide-build-cmake-1.44.0-win32-x64/resources/cube-cmake/win32/x86_64/cube-cmake.exe -B build/Debug --preset Debug)",
+      "Bash(/c/Users/15370/.vscode/extensions/stmicroelectronics.stm32cube-ide-build-cmake-1.44.0-win32-x64/resources/cube-cmake/win32/x86_64/cube-cmake.exe --build /d/ALL_Project/Xdiansai/nrf-OLEDtest/build/Debug --)"
     ]
   }
 }

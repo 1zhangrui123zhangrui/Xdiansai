@@ -146,9 +146,7 @@ void OLED_GPIO_Init(void)
 	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
  	GPIO_Init(GPIOB, &GPIO_InitStructure);
 	*/
-	/*释放SCL和SDA*/
-	MX_GPIO_Init();
-	
+	/*释放SCL和SDA（GPIO已在MX_GPIO_Init中初始化）*/
 	OLED_W_SCL(1);
 	OLED_W_SDA(1);
 }

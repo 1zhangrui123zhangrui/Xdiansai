@@ -15,7 +15,6 @@ set(MX_Include_Dirs
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Drivers/CMSIS/Device/ST/STM32F1xx/Include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Drivers/CMSIS/Include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../OLED
 )
 
 # STM32CubeMX generated application sources
@@ -26,14 +25,6 @@ set(MX_Application_Src
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/sysmem.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/syscalls.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../startup_stm32f103xb.s
-    # OLED driver sources
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../OLED/OLED.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../OLED/OLED_Data_ASCII.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../OLED/OLED_Data_Image.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../OLED/OLED_Data_Hanzi.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../OLED/OLED_Patch_byAdam.c
-    # NRF24L01 driver source
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/NRF24L01.c
 )
 
 # STM32 HAL/LL Drivers

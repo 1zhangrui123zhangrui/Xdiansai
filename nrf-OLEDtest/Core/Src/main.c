@@ -22,7 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "OLED.h"
-#include "NRF24L01.h"
+#include "24l01.h"
 #include "stm32f1xx_hal.h"
 #include "stm32f1xx_hal_gpio.h"
 #include <stdio.h>
@@ -45,6 +45,8 @@
 
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
+DMA_HandleTypeDef hdma_spi1_rx;
+DMA_HandleTypeDef hdma_spi1_tx;
 
 /* USER CODE BEGIN PV */
 char nrf_oled1[20]="";
@@ -55,7 +57,8 @@ char nrf_oled4[20]="";
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
-void MX_GPIO_Init(void);
+static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
 
@@ -63,7 +66,15 @@ static void MX_SPI1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+/**
+  * @brief SPI 发送和接收完成回调函数
+  * @param hspi: SPI 句柄指针
+  */
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+	// 传输完成后停止 SPI 的 DMA 传输模式
+	HAL_SPI_DMAStop(hspi);
+}
 /* USER CODE END 0 */
 
 /**
@@ -95,6 +106,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   HAL_Delay(20);//短暂延时后初始化OLED
@@ -107,7 +119,8 @@ int main(void)
   OLED_Update();
   NRF24L01_Init();
   HAL_Delay(20);
-  int mode =1;//0为发送，1为接收
+  int mode = 0; // 0为发送，1为接收
+  int time_NRF_WAIT = 0;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -115,35 +128,43 @@ int main(void)
   while (1)
   {
     OLED_Clear();
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-    if(mode ==0)
+    while(NRF24L01_Check())
     {
       OLED_Clear();
-      NRF24L01_TxPacket[0] ++;
+      time_NRF_WAIT++;
+      char str_ssd[20] = "NO NRF24L01";           // 准备激活状态显示字符串
+      OLED_ShowString(5,20,str_ssd,OLED_8X16);//在屏幕显示停止状态
+      OLED_ShowNum(5, 40, time_NRF_WAIT, 6, OLED_8X16);
+      OLED_Update();
+      HAL_Delay(1000);
+    }
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+    //发送状态
+    if(mode == 0)
+    {
+      NRF24L01_TX_Mode();
+      OLED_Clear();
+      NRF24L01_TxPacket[0]++;
       NRF24L01_TxPacket[1] += 2;
       NRF24L01_TxPacket[2] += 3;
-      NRF24L01_TxPacket[3] += 4; 
-      NRF24L01_Send();
-      sprintf(nrf_oled1, "%d", NRF24L01_TxPacket[0]);
-      sprintf(nrf_oled2, "%d", NRF24L01_TxPacket[1]);
-      sprintf(nrf_oled3, "%d", NRF24L01_TxPacket[2]);
-      sprintf(nrf_oled4, "%d", NRF24L01_TxPacket[3]);
-      NRF24L01_Send();
+      NRF24L01_TxPacket[3] += 4;
+      NRF24L01_TxPacket_Send(NRF24L01_TxPacket);
       OLED_ShowString(30, 20, "SEND", OLED_8X16);
-      OLED_ShowHexNum(1,1, NRF24L01_TxPacket[0], 2, OLED_8X16);
+      OLED_ShowHexNum(1,1,  NRF24L01_TxPacket[0], 2, OLED_8X16);
       OLED_ShowHexNum(1,14, NRF24L01_TxPacket[1], 2, OLED_8X16);
       OLED_ShowHexNum(1,28, NRF24L01_TxPacket[2], 2, OLED_8X16);
       OLED_ShowHexNum(1,42, NRF24L01_TxPacket[3], 2, OLED_8X16);
       OLED_Update();
     }
+    //接收状态
     if (mode == 1) {
-    
+      NRF24L01_RX_Mode();
       OLED_Clear();
-      if (NRF24L01_Receive() == 1)
+      if (NRF24L01_RxPacket_Recv(NRF24L01_RxPacket) == 0)
         {
             OLED_Clear();
             OLED_ShowString(30, 20, "RECEIVE", OLED_8X16);
-            OLED_ShowHexNum(1,1, NRF24L01_RxPacket[0], 2, OLED_8X16);
+            OLED_ShowHexNum(1,1,  NRF24L01_RxPacket[0], 2, OLED_8X16);
             OLED_ShowHexNum(1,14, NRF24L01_RxPacket[1], 2, OLED_8X16);
             OLED_ShowHexNum(1,28, NRF24L01_RxPacket[2], 2, OLED_8X16);
             OLED_ShowHexNum(1,42, NRF24L01_RxPacket[3], 2, OLED_8X16);
@@ -217,7 +238,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -233,11 +254,30 @@ static void MX_SPI1_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+  /* DMA1_Channel3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
   */
-void MX_GPIO_Init(void)
+static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
@@ -254,7 +294,7 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, PA0_Pin|PA1_Pin|PA2_Pin|PA3_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3|GPIO_PIN_4, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_8|GPIO_PIN_9, GPIO_PIN_RESET);
@@ -266,18 +306,18 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PA0_Pin PA1_Pin PA2_Pin PA3_Pin */
-  GPIO_InitStruct.Pin = PA0_Pin|PA1_Pin|PA2_Pin|PA3_Pin;
+  /*Configure GPIO pin : PA2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_2;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PA3 PA4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PA4_Pin */
-  GPIO_InitStruct.Pin = PA4_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(PA4_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB10 */
   GPIO_InitStruct.Pin = GPIO_PIN_10;

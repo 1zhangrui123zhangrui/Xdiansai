@@ -45,13 +45,20 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
-    Core/Src/NRF24L01.c
+    NRF24L01/24l01.c
+    OLED/OLED.c
+    OLED/OLED_Data_ASCII.c
+    OLED/OLED_Data_Hanzi.c
+    OLED/OLED_Data_Image.c
+    OLED/OLED_Patch_byAdam.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     Core/Inc
+    NRF24L01
+    OLED
 )
 
 # Add project symbols (macros)
