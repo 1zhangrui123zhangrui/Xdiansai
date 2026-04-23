@@ -1,6 +1,4 @@
- # =========================
-  # Build directories
-  # =========================
+# Build directories
   build/
   build-*/
   cmake-build-*/
@@ -10,21 +8,18 @@
   x64/
   x86/
 
-  # CMake
+  # CMake generated files
   CMakeCache.txt
   CMakeFiles/
   cmake_install.cmake
   compile_commands.json
   CTestTestfile.cmake
   Testing/
-  Makefile
   build.ninja
   .ninja_deps
   .ninja_log
 
-  # =========================
   # STM32 / embedded outputs
-  # =========================
   *.o
   *.obj
   *.d
@@ -38,15 +33,14 @@
   *.srec
   *.lnp
   *.dep
-
-  # Linker / generated reports
   *.lst
   *.log
 
-  # =========================
   # IDE / editor
-  # =========================
-  .vscode/
+  .vscode/*
+  !.vscode/launch.json
+  !.vscode/tasks.json
+  !.vscode/extensions.json
   .idea/
   .clion/
   .settings/
@@ -59,16 +53,12 @@
   # Codex / Claude
   .claude/
 
-  # =========================
   # OS files
-  # =========================
   .DS_Store
   Thumbs.db
   desktop.ini
 
-  # =========================
   # Python
-  # =========================
   __pycache__/
   *.pyc
   *.pyo
@@ -77,9 +67,7 @@
   venv/
   env/
 
-  # =========================
   # Temporary / backup
-  # =========================
   *.tmp
   *.temp
   *.bak
@@ -88,16 +76,9 @@
   *~
   *.orig
 
-  # =========================
   # Archives
-  # =========================
   *.zip
   *.7z
   *.rar
   *.tar
   *.gz
-
-  # =========================
-  # Documents
-  # =========================
-  *.pdf
