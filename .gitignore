@@ -82,3 +82,4 @@
   *.rar
   *.tar
   *.gz
+.vscode/launch.json
