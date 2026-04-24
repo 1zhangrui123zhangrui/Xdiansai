@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "OLED.h"
 #include "24l01.h"
+#include "stm32f103xb.h"
 #include "stm32f1xx_hal.h"
 #include "stm32f1xx_hal_gpio.h"
 #include <stdio.h>
@@ -50,9 +51,9 @@ DMA_HandleTypeDef hdma_spi1_tx;
 
 /* USER CODE BEGIN PV */
 char nrf_oled1[20]="";
-char nrf_oled2[20]="";
-char nrf_oled3[20]="";
-char nrf_oled4[20]="";
+volatile int beep_time = 0;        // 剩余蜂鸣次数，由中断设置
+volatile int beep_state = 0;       // 0=静音中, 1=响中
+volatile uint32_t beep_tick = 0;   // 上次状态切换时间戳
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -74,6 +75,25 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 {
 	// 传输完成后停止 SPI 的 DMA 传输模式
 	HAL_SPI_DMAStop(hspi);
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == GPIO_PIN_8) {
+    NRF24L01_TX_Mode();
+      OLED_Clear();
+      NRF24L01_TxPacket[0]=1;
+      NRF24L01_TxPacket_Send(NRF24L01_TxPacket);
+      OLED_ShowString(30, 20, "SEND_fire", OLED_8X16);
+      OLED_ShowHexNum(1,1,  NRF24L01_TxPacket[0], 2, OLED_8X16);
+      OLED_Update();
+      NRF24L01_TxPacket[0]=0;
+      // 启动蜂鸣器序列：立即开始第1次响
+      beep_time = 3;
+      beep_state = 1;
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET); // 高电平触发
+      beep_tick = HAL_GetTick();
+  }
 }
 /* USER CODE END 0 */
 
@@ -109,6 +129,7 @@ int main(void)
   MX_DMA_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
   HAL_Delay(20);//短暂延时后初始化OLED
   OLED_Init();
   OLED_Clear();
@@ -127,8 +148,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    OLED_Clear();
-    while(NRF24L01_Check())
+        while(NRF24L01_Check())
     {
       OLED_Clear();
       time_NRF_WAIT++;
@@ -138,7 +158,33 @@ int main(void)
       OLED_Update();
       HAL_Delay(1000);
     }
+    OLED_Clear();
+    char str_ssd[20] = "NRF24L01 READY";           // 准备激活状态显示字符串
+    OLED_ShowString(5,20,str_ssd,OLED_8X16);//在屏幕显示停止状态
+    OLED_Update();
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+    // 蜂鸣器非阻塞状态机：响3次，每次0.5s，间隔0.5s
+    if (beep_time > 0)
+    {
+      uint32_t now = HAL_GetTick();
+      if (beep_state == 1 && (now - beep_tick) >= 500)
+      {
+        // 响了0.5s，关闭蜂鸣器
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
+        beep_state = 0;
+        beep_tick = now;
+        beep_time--;
+      }
+      else if (beep_state == 0 && beep_time > 0 && (now - beep_tick) >= 500)
+      {
+        // 静音0.5s结束，开启下一次
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+        beep_state = 1;
+        beep_tick = now;
+      }
+    }
+
+    /*
     //发送状态
     if(mode == 0)
     {
@@ -156,6 +202,7 @@ int main(void)
       OLED_ShowHexNum(1,42, NRF24L01_TxPacket[3], 2, OLED_8X16);
       OLED_Update();
     }
+      */
     //接收状态
     if (mode == 1) {
       NRF24L01_RX_Mode();
@@ -171,7 +218,7 @@ int main(void)
             OLED_Update();
         }
     }
-    HAL_Delay(1000);
+    HAL_Delay(50);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -297,7 +344,8 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3|GPIO_PIN_4, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_8|GPIO_PIN_9, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_8
+                          |GPIO_PIN_9, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : PC13 */
   GPIO_InitStruct.Pin = GPIO_PIN_13;
@@ -319,26 +367,36 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PB10 */
-  GPIO_InitStruct.Pin = GPIO_PIN_10;
+  /*Configure GPIO pin : PB12 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PB11 */
-  GPIO_InitStruct.Pin = GPIO_PIN_11;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PB8 PB9 */
-  GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;
+  /*Configure GPIO pins : PB14 PB8 PB9 */
+  GPIO_InitStruct.Pin = GPIO_PIN_14|GPIO_PIN_8|GPIO_PIN_9;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PA8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 

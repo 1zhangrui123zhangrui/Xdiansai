@@ -99,7 +99,7 @@ uint8_t OLED_DisplayBuf[8][128];
   //此处改写为HAL库
 void OLED_W_SCL(int x)
 {
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, (GPIO_PinState) x);
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, (GPIO_PinState) x);
 }
 
 
@@ -114,7 +114,7 @@ void OLED_W_SCL(int x)
 //此处改写为HAL库
 void OLED_W_SDA(int x)
 {
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, (GPIO_PinState) x);
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, (GPIO_PinState) x);
 }
 
 /**
