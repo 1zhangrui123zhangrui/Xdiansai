@@ -48,11 +48,19 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/NRF24L01/24l01.c
+    Core/App/motor.c
+    Core/App/kinematics.c
+    Core/App/task.c
+    Core/App/screen.c
+    Core/App/nrf_app.c
+    Core/App/buzzer.c
+    Core/App/motor_test.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     Core/NRF24L01
+    Core/App
 )
 
 # Add project symbols (macros)

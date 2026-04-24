@@ -2,17 +2,16 @@
 /**
   ******************************************************************************
   * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
+  * @brief          : 绳驱巡检装置主程序 (STM32F407VET6)
   *
-  * Copyright (c) 2026 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
+  * 外设分配:
+  *   USART1 (PA9/PA10) - 电机多机通信 (ZDT X42S ×4)
+  *   USART2 (PA2/PA3)  - 串口屏
+  *   USART3 (PB10/PB11)- 预留 (调试)
+  *   SPI1   (PA5/6/7)  - NRF24L01 无线通信
+  *     PA8=CE, PC9=CSN, PC8=IRQ
+  *   PC9  - NRF CSN (注意: 如需独立蜂鸣器, 需在 IOC 中新增 GPIO)
+  *   PB8  - 蜂鸣器 (需在 IOC 中添加)
   ******************************************************************************
   */
 /* USER CODE END Header */
@@ -25,7 +24,14 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "platform_config.h"
+#include "motor.h"
+#include "kinematics.h"
+#include "task.h"
+#include "screen.h"
+#include "nrf_app.h"
+#include "buzzer.h"
+#include "motor_test.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,7 +41,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+/* 取消注释下面这行以开启电机单独测试模式 (正常使用时保持注释) */
+//#define MOTOR_TEST_ENABLE
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -52,7 +59,13 @@
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-
+/* 串口屏回调 */
+static void on_home(void)         { Task_EStop(); }
+static void on_start(void)        { Task_StartHome(); }
+static void on_area(void)         { Task_StartAreaPatrol(); }
+static void on_auto(void)         { Task_StartAutoPatrol(); }
+static void on_calibrate(void)    { Task_StartCalibrate(); }
+static void on_seq(uint8_t *s)    { Task_StartSeqPatrol(s); }
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -68,7 +81,6 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -96,12 +108,59 @@ int main(void)
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
 
+  /* --- 串口屏 --- */
+  Screen_Init(SCREEN_UART);
+  Screen_RegisterCallback(CMD_HOME,         on_home);
+  Screen_RegisterCallback(CMD_START,        on_start);
+  Screen_RegisterCallback(CMD_AREA_PATROL,  on_area);
+  Screen_RegisterCallback(CMD_AUTO_PATROL,  on_auto);
+  Screen_RegisterCallback(CMD_CALIBRATE,    on_calibrate);
+  Screen_RegisterSequenceCallback(on_seq);
+
+  /* --- 电机 --- */
+  Motor_Init(MOTOR_UART);
+
+#ifdef MOTOR_TEST_ENABLE
+  /* ======== 电机测试模式 ========
+   * 取消注释 #define MOTOR_TEST_ENABLE 后进入此分支
+   * 电机 1 正转 1 圈 × 3 次, 完成后停在原位
+   * ============================== */
+  HAL_Delay(1000);   /* 等待电机上电稳定 */
+  MotorTest_Run();
+  while (1) {}       /* 测试完成, 停在这里, 重新烧录才能继续 */
+#endif
+
+  /* --- 运动学初始化 (先标定再调用) --- */
+  Kinematics_Init();
+
+  /* --- NRF --- */
+  NrfApp_Init();
+
+  /* --- 蜂鸣器 --- */
+  Buzzer_Init();
+
+  /* --- 任务调度 --- */
+  Task_Init();
+
+  Motor_EnableAll();
+
+  uint32_t last_coord_ms = 0;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    /* 任务状态机 */
+    Task_Tick();
+
+    /* 每 100ms 上报坐标到串口屏 */
+    if (HAL_GetTick() - last_coord_ms >= COORD_UPDATE_INTERVAL_MS) {
+        last_coord_ms = HAL_GetTick();
+        Screen_SetCoord(Task_GetLaserX(), Task_GetLaserY());
+    }
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -155,7 +214,6 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
 /* USER CODE END 4 */
 
 /**
