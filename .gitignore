@@ -83,3 +83,9 @@
   *.tar
   *.gz
 .vscode/launch.json
+F407_main/.clangd
+F407_main/.vscode/settings.json
+F407_main/.vscode/c_cpp_properties.json
+F407_main/.settings/ide.store.json
+F407_main/.settings/bundles.store.json
+F407_main/.settings/bundles-lock.store.json
