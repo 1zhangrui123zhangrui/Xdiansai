@@ -119,7 +119,7 @@ int main(void)
   OLED_Update();
   NRF24L01_Init();
   HAL_Delay(20);
-  int mode = 0; // 0为发送，1为接收
+  int mode = 1; // 0为发送，1为接收
   int time_NRF_WAIT = 0;
   /* USER CODE END 2 */
 
