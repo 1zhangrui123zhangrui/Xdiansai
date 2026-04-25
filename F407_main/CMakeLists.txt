@@ -55,6 +55,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/App/nrf_app.c
     Core/App/buzzer.c
     Core/App/motor_test.c
+    Core/App/screen_test.c
 )
 
 # Add include paths

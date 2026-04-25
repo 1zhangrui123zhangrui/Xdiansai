@@ -5,6 +5,7 @@
 #include "screen.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 
 static UART_HandleTypeDef *s_huart    = NULL;
 static uint8_t             s_rx_byte  = 0;
@@ -29,6 +30,29 @@ static const uint8_t k_end[3] = {0xFF, 0xFF, 0xFF};
 
 /* ---------- 内部 ---------- */
 
+static void format_fixed2(float value, char *out, size_t out_size)
+{
+    uint8_t negative = 0U;
+    if (value < 0.0f) {
+        negative = 1U;
+        value = -value;
+    }
+
+    uint32_t scaled = (uint32_t)(value * 100.0f + 0.5f);
+    uint32_t whole  = scaled / 100U;
+    uint32_t frac   = scaled % 100U;
+
+    if (scaled == 0U) {
+        negative = 0U;
+    }
+
+    snprintf(out,
+             out_size,
+             negative ? "-%lu.%02lu" : "%lu.%02lu",
+             (unsigned long)whole,
+             (unsigned long)frac);
+}
+
 static void raw_send(const char *str)
 {
     HAL_UART_Transmit(s_huart, (uint8_t *)str, (uint16_t)strlen(str), 100);
@@ -47,11 +71,14 @@ static void dispatch(uint8_t cmd)
 
 static void flush_fire(void)
 {
+    char num[24];
     char buf[40];
     for (uint8_t i = 0; i < s_fire_cnt; i++) {
-        snprintf(buf, sizeof(buf), "tF%dX.txt=\"%.2f\"", i + 1, (double)s_fire_x[i]);
+        format_fixed2(s_fire_x[i], num, sizeof(num));
+        snprintf(buf, sizeof(buf), "tF%dX.txt=\"%s\"", i + 1, num);
         raw_send(buf);
-        snprintf(buf, sizeof(buf), "tF%dY.txt=\"%.2f\"", i + 1, (double)s_fire_y[i]);
+        format_fixed2(s_fire_y[i], num, sizeof(num));
+        snprintf(buf, sizeof(buf), "tF%dY.txt=\"%s\"", i + 1, num);
         raw_send(buf);
     }
 }
@@ -93,10 +120,15 @@ uint8_t Screen_GetCurrentPage(void)
 
 void Screen_SetCoord(float x, float y)
 {
+    char num[24];
     char buf[40];
-    snprintf(buf, sizeof(buf), "tX.txt=\"%.2f\"", (double)x);
+
+    format_fixed2(x, num, sizeof(num));
+    snprintf(buf, sizeof(buf), "tX.txt=\"%s\"", num);
     raw_send(buf);
-    snprintf(buf, sizeof(buf), "tY.txt=\"%.2f\"", (double)y);
+
+    format_fixed2(y, num, sizeof(num));
+    snprintf(buf, sizeof(buf), "tY.txt=\"%s\"", num);
     raw_send(buf);
 }
 
@@ -143,18 +175,21 @@ void Screen_OnByteReceived(uint8_t byte)
 
     case RX_SEQ:
         if (byte == 0xFEU) {
-            if (s_seq_idx == 5 && s_seq_cb) {
+            if (s_seq_cb) {
                 uint8_t seq[5];
-                uint8_t valid = 1;
-                for (uint8_t i = 0; i < 5; i++) {
-                    if (s_seq_buf[i] >= '1' && s_seq_buf[i] <= '5') {
-                        seq[i] = s_seq_buf[i] - '0';
-                    } else {
-                        valid = 0;
-                        break;
+                if (s_seq_idx == 0) {
+                    /* 屏幕未发送序列数据 → 使用默认顺序 1-2-3-4-5 */
+                    for (uint8_t i = 0; i < 5; i++) seq[i] = i + 1U;
+                    s_seq_cb(seq);
+                } else if (s_seq_idx == 5) {
+                    uint8_t valid = 1;
+                    for (uint8_t i = 0; i < 5; i++) {
+                        if (s_seq_buf[i] >= '1' && s_seq_buf[i] <= '5') {
+                            seq[i] = s_seq_buf[i] - '0';
+                        } else { valid = 0; break; }
                     }
+                    if (valid) s_seq_cb(seq);
                 }
-                if (valid) s_seq_cb(seq);
             }
             s_rx_state = RX_HEAD1;
         } else if (s_seq_idx < 5) {

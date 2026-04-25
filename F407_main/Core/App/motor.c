@@ -169,14 +169,12 @@ void Motor_MultiPositionCmd(const float angle_deg[4],
                               0x00U);  /* sync=0: 立即执行 */
     }
 
-    /* 总帧长 = 00 AA(2) + len(2) + cmds + 6B(1) */
-    uint16_t total_len = 2U + 2U + cmd_total + 1U;
-
+    /* len 字段 = 命令内容字节数 (不含 00 AA / len / 6B) */
     uint8_t frame[4 + 13 * 4 + 1];
     frame[0] = MOTOR_ID_BROADCAST;
     frame[1] = MOTOR_CMD_MULTI;
-    frame[2] = (uint8_t)(total_len >> 8);
-    frame[3] = (uint8_t)(total_len);
+    frame[2] = (uint8_t)(cmd_total >> 8);
+    frame[3] = (uint8_t)(cmd_total);
     memcpy(frame + 4, cmds, cmd_total);
     frame[4 + cmd_total] = MOTOR_CHECKSUM;
 

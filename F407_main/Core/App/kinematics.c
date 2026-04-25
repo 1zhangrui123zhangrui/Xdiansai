@@ -40,8 +40,10 @@ static float rope_len(uint8_t i, float cx, float cy)
 void Kinematics_Init(void)
 {
     k_spool_circ_cm = 2.0f * (float)M_PI * SPOOL_RADIUS_CM;
+    /* 上电时激光在(0,0), 摄像头在(-LASER_OFFSET_X_CM, 0),
+     * 电机零点就在此物理位置, 基准绳长必须用摄像头实际起始坐标计算。 */
     for (uint8_t i = 0; i < 4; i++) {
-        k_l0[i] = rope_len(i, 0.0f, 0.0f);
+        k_l0[i] = rope_len(i, -LASER_OFFSET_X_CM, 0.0f);
     }
 }
 

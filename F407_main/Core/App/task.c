@@ -125,7 +125,8 @@ void Task_Init(void)
  * ============================================================ */
 void Task_StartHome(void)
 {
-    Motor_EnableAll();
+    /* 注意: 此函数从 USART2 中断上下文调用, 不能调用含 HAL_Delay 的函数。
+     * 电机在 main.c 上电时已 EnableAll, 此处直接设置状态即可。 */
     s_state = TASK_HOME;
     s_moving = 0;
 }
@@ -181,8 +182,8 @@ void Task_Tick(void)
     /* 处理异步蜂鸣 */
     Buzzer_Tick();
 
-    /* NRF 轮询 */
-    if (NrfApp_Poll()) {
+    /* NRF 轮询 */  /* TODO: 暂时禁用, NRF SPI 卡死 */
+    if (0 && NrfApp_Poll()) {
         /* 在自动巡逻时检测火源 */
         if (s_state == TASK_AUTO_PATROL && NrfApp_IsFire()) {
             /* 停止运动, 蜂鸣三声, 记录火源位置

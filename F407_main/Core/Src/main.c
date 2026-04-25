@@ -32,6 +32,7 @@
 #include "nrf_app.h"
 #include "buzzer.h"
 #include "motor_test.h"
+#include "screen_test.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -41,8 +42,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-/* 取消注释下面这行以开启电机单独测试模式 (正常使用时保持注释) */
+/* 取消注释以开启对应测试模式，正常使用时全部保持注释 */
 //#define MOTOR_TEST_ENABLE
+//#define SCREEN_TEST_ENABLE
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -120,29 +122,38 @@ int main(void)
   /* --- 电机 --- */
   Motor_Init(MOTOR_UART);
 
-#ifdef MOTOR_TEST_ENABLE
-  /* ======== 电机测试模式 ========
-   * 取消注释 #define MOTOR_TEST_ENABLE 后进入此分支
-   * 电机 1 正转 1 圈 × 3 次, 完成后停在原位
-   * ============================== */
-  HAL_Delay(1000);   /* 等待电机上电稳定 */
-  MotorTest_Run();
-  while (1) {}       /* 测试完成, 停在这里, 重新烧录才能继续 */
-#endif
+  /* --- 上电自动标定 ---
+   * 请确保上电前平台已手动放置到中心位置 (激光对准中心圆)
+   * 先使能再清零, 保证命令被电机接受 */
+  Motor_EnableAll();
+  HAL_Delay(500);
+  Motor_ZeroAllPositions();
+  HAL_Delay(200);
 
-  /* --- 运动学初始化 (先标定再调用) --- */
+  /* --- 运动学初始化 (零点已设置) --- */
   Kinematics_Init();
 
+#ifdef MOTOR_TEST_ENABLE
+  HAL_Delay(500);
+  MotorTest_Run();
+  while (1) {}
+#endif
+
+#ifdef SCREEN_TEST_ENABLE
+  /* ======== 串口屏测试模式 ========
+   * ScreenTest_Run 内部自行初始化 USART2，不用 Screen_Init */
+  ScreenTest_Run();
+  while (1) {}
+#endif
+
   /* --- NRF --- */
-  NrfApp_Init();
+  // NrfApp_Init();  /* TODO: SPI 卡死, 暂时禁用以测试电机 */
 
   /* --- 蜂鸣器 --- */
   Buzzer_Init();
 
   /* --- 任务调度 --- */
   Task_Init();
-
-  Motor_EnableAll();
 
   uint32_t last_coord_ms = 0;
 
