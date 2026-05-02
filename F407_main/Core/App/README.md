@@ -9,7 +9,7 @@
 | 文件 | 职责 | 对外接口 |
 |------|------|----------|
 | `platform_config.h` | 所有宏参数 | — |
-| `motor.h/.c` | ZDT X42S Emm 固件驱动 | `Motor_Init / Enable / Stop / MoveAbsolute / MultiPositionCmd` |
+| `motor.h/.c` | ZDT X42S X 固件驱动 | `Motor_Init / Enable / Stop / MoveAbsolute / MultiPositionCmd` |
 | `kinematics.h/.c` | 绳长↔坐标换算 | `Kinematics_Init / LaserToCam / CamToAngles` |
 | `task.h/.c` | 任务状态机 | `Task_Init / Tick / StartHome / StartAreaPatrol ...` |
 | `screen.h/.c` | 串口屏通信 | `Screen_Init / SetCoord / RecordFire / RegisterCallback` |
@@ -23,12 +23,13 @@
 
 | 宏 | 含义 | 默认值 | 说明 |
 |----|------|--------|------|
-| `ROPE_H_CM` | 滑轮到平台竖直距离 (cm) | `0.0` | 滑轮与平台水平时为 0 |
+| `ROPE_H_CM` | 滑轮到平台竖直距离 (cm) | `7.5` | 按实际高度差继续标定 |
 | `SPOOL_RADIUS_CM` | 绕线轮半径 (cm) | `3.5` | 实测 35mm |
-| `LASER_OFFSET_X_CM` | 激光笔距摄像头中心 X 偏移 (cm) | `3.5` | 向正 X 方向 |
-| `MOTOR_SPEED_RPM` | 运动速度 (RPM) | `300` | 调低可更稳 |
-| `MOTOR_ACCEL_LEVEL` | 加速档位 0-255 | `50` | 0=直接起速 |
-| `MOTOR_MOVE_TIMEOUT_MS` | 运动超时 (ms) | `8000` | 按实际调整 |
+| `LASER_OFFSET_X_CM` | 激光点距平台中心 X 偏移 (cm) | `3.5` | 激光在中心时平台中心为 (-3.5, 0) |
+| `MOTOR_SPEED_RPM` | 运动速度 (RPM) | `20` | 调低可更稳 |
+| `MOTOR_ACCEL_RPMS` | 加速加速度 RPM/S | `15` | X 固件梯形曲线参数 |
+| `MOTOR_DECEL_RPMS` | 减速加速度 RPM/S | `15` | X 固件梯形曲线参数 |
+| `MOTOR_MOVE_TIMEOUT_MS` | 运动超时 (ms) | `5000` | 按实际调整 |
 | `MOTOR_ID_1~4` | 电机地址 | `1~4` | 需与电机拨码一致 |
 
 ---
@@ -36,16 +37,16 @@
 ## motor.h/.c — 电机驱动
 
 ### 固件说明
-ZDT X42S V1.0 出厂默认 **Emm 固件**。
+ZDT X42S 使用 **X 固件**。
 
-Emm FD 位置命令格式 (13 字节):
+X 固件 FD 梯形曲线加减速位置命令格式 (16 字节):
 ```
-Addr  FD  dir  spd_h spd_l  acc  p3 p2 p1 p0  mode  sync  6B
+Addr FD dir acc_h acc_l dec_h dec_l spd_h spd_l pos3 pos2 pos1 pos0 mode sync 6B
 ```
 - `dir`: `0x00`=CW(收线/正转)，`0x01`=CCW(放线/反转)
-- `speed`: 0~3000 RPM，2 字节大端
-- `acc`: 加速档位 0~255（0=直接起速，越大越快）
-- `pulses`: 脉冲数，**3200 脉冲 = 1 圈**（1.8°步进 × 16 细分）
+- `acc/dec`: 加/减速度，单位 RPM/S，2 字节大端
+- `speed`: 最大速度，单位 0.1RPM，2 字节大端
+- `pos`: 位置角度，单位 0.1°，4 字节大端
 - `mode`: `0x01`=绝对零点，`0x02`=相对当前位置
 
 ### 主要接口
@@ -53,19 +54,20 @@ Addr  FD  dir  spd_h spd_l  acc  p3 p2 p1 p0  mode  sync  6B
 // 初始化
 Motor_Init(&huart1);
 
-// 使能 / 停止
+// 使能 / 停止 / 松轴
 Motor_EnableAll();
 Motor_StopAll();
+Motor_DisableAll();
 
-// 标定: 平台放到中心后调用, 将所有电机角度清零
+// 标定: 激光点在中心圆时调用, 将所有电机当前位置角度清零
 Motor_ZeroAllPositions();
 
 // 绝对位置运动 (以标定点为零)
 // angle_deg > 0 → CW 收线, < 0 → CCW 放线
-Motor_MoveAbsolute(MOTOR_ID_1, 360.0f, 300.0f, 50, 0);
+Motor_MoveAbsolute(MOTOR_ID_1, 360.0f, 300.0f, 500, 500, 0);
 
 // 四电机多机原子命令
-Motor_MultiPositionCmd(angles, 300.0f, 50);
+Motor_MultiPositionCmd(angles, 300.0f, 500, 500);
 ```
 
 ---
@@ -76,14 +78,16 @@ Motor_MultiPositionCmd(angles, 300.0f, 50);
 
 ```
 激光目标 (lx, ly)
-      ↓ LaserToCam: cam_x = lx - LASER_OFFSET_X_CM
-      ↓ CamToAngles: 绳长差分 → 角度
+      ↓ LaserToCam: 按现场轴向修正, 转为平台中心坐标
+      ↓ CamToAngles: 平台四角挂点绳长差分 → 角度
 angles[4] → Motor_MultiPositionCmd
 ```
 
 绳长公式 (H≈0 时退化为 2D):
 ```
-L_i = sqrt( (cam_x - EA_i_x)^2 + (cam_y - EA_i_y)^2 )
+platform_center = (laser_x - LASER_OFFSET_X_CM, laser_y)
+corner_i = platform_center + platform_corner_offset_i
+L_i = sqrt( (corner_i_x - motor_i_x)^2 + (corner_i_y - motor_i_y)^2 + H^2 )
 angle_i (°) = (L_i_at_zero - L_i_at_target) / (2π×R) × 360
 ```
 

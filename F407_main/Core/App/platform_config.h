@@ -14,7 +14,7 @@
 /* ============================================================
  * 电机 UART (USART1, PA9=TX, PA10=RX)
  * 四台 ZDT X42S 电机通过 RS-485 / TTL 连接到 USART1
- * 固件: Emm 固件 (X42S V1.0 出厂默认)
+ * 固件: X 固件
  * ============================================================ */
 #define MOTOR_UART              (&huart1)
 #define MOTOR_BAUD              115200U
@@ -31,28 +31,69 @@
  * 机械几何参数 (单位: cm)
  * ============================================================ */
 
-/* 电机轴在纸面上的投影坐标 (以中心圆为原点) */
-#define MOTOR1_PROJ_X   (-26.7f)
-#define MOTOR1_PROJ_Y   (-26.7f)
-#define MOTOR2_PROJ_X   ( 26.7f)
-#define MOTOR2_PROJ_Y   (-26.7f)
-#define MOTOR3_PROJ_X   ( 26.7f)
-#define MOTOR3_PROJ_Y   ( 26.7f)
-#define MOTOR4_PROJ_X   (-26.7f)
-#define MOTOR4_PROJ_Y   ( 26.7f)
+/* 绳子出线点在纸面上的投影坐标 (以中心圆为原点) */
+#define MOTOR1_PROJ_X   (-29.5f)
+#define MOTOR1_PROJ_Y   (-30.5f)
+#define MOTOR2_PROJ_X   ( 30.5f)
+#define MOTOR2_PROJ_Y   (-31.0f)
+#define MOTOR3_PROJ_X   ( 30.5f)
+#define MOTOR3_PROJ_Y   ( 30.5f)
+#define MOTOR4_PROJ_X   (-30.0f)
+#define MOTOR4_PROJ_Y   ( 30.5f)
 
 /* 平台尺寸 (10cm×10cm 正方形, 绳子固定在四角) */
 #define PLATFORM_HALF_CM    5.0f
 
 /* 绳子竖直分量 (cm)
- * 滑轮顶部与平台几乎水平 → H≈0 */
-#define ROPE_H_CM           0.0f
+ * 出线点到平台挂点的垂直高度差。高度必须接近真实值, 否则大范围移动会失张力/歪斜。 */
+#define ROPE_H_CM           7.5f
 
 /* 绕线轮半径 (cm): 实测 35mm = 3.5cm */
 #define SPOOL_RADIUS_CM     3.5f
 
-/* 激光笔相对摄像头中心的偏移 (cm, 沿 X 轴正方向) */
+/* 激光点相对平台中心的 X 偏移 (cm)
+ * 激光点在中心圆 (0,0) 时, 平台中心在 (-3.5, 0)。 */
 #define LASER_OFFSET_X_CM   3.5f
+
+/* 现场坐标轴修正: 1=目标坐标进入运动学前交换 X/Y */
+#define KINEMATICS_SWAP_XY  0U
+
+/* 开环坐标标定补偿
+ * 由实测“目标坐标 -> 实际坐标”拟合得到, 用于把期望激光坐标先转换成
+ * 更大的虚拟目标坐标, 再进入绳长运动学。
+ *
+ * 拟合数据:
+ *   右(20,0)->(12.5,0), 上(0,20)->(0,11.7), 左(-20,0)->(-9.8,0),
+ *   下(0,-20)->(0,-11.5), 四个角点同理。
+ *
+ * 实际约为:
+ *   actual_x = 0.5775 * cmd_x + 0.008333 * cmd_y
+ *   actual_y = -0.005833 * cmd_x + 0.525833 * cmd_y
+ *
+ * 因此这里使用其逆矩阵:
+ *   cmd_x = 1.731325 * target_x - 0.027438 * target_y
+ *   cmd_y = 0.019206 * target_x + 1.901439 * target_y
+ */
+#define KINEMATICS_CALIB_ENABLE     0U
+#define KINEMATICS_CALIB_XX         ( 1.731325f)
+#define KINEMATICS_CALIB_XY         (-0.027438f)
+#define KINEMATICS_CALIB_YX         ( 0.019206f)
+#define KINEMATICS_CALIB_YY         ( 1.901439f)
+
+/* 电机方向修正: 1=正常, -1=反向 */
+#define MOTOR1_DIR_SIGN     ( 1.0f)
+#define MOTOR2_DIR_SIGN     ( 1.0f)
+#define MOTOR3_DIR_SIGN     ( 1.0f)
+#define MOTOR4_DIR_SIGN     ( 1.0f)
+
+/* 电机绳长/卷筒等效比例微调: >1 表示该电机收放绳更多 */
+#define MOTOR1_ANGLE_SCALE  ( 1.00f)
+#define MOTOR2_ANGLE_SCALE  ( 1.00f)
+#define MOTOR3_ANGLE_SCALE  ( 1.00f)
+#define MOTOR4_ANGLE_SCALE  ( 1.00f)
+
+/* 回中心时给 2 号一个很小的额外收线量, 用于补偿中心松绳 */
+#define MOTOR2_CENTER_TAKEUP_DEG  ( 0.0f)
 
 /* ============================================================
  * 橙色圆形区域的激光目标坐标 (cm, 以中心圆为原点)
@@ -69,11 +110,12 @@
 #define CIRCLE5_Y   (  0.0f)
 
 /* ============================================================
- * 电机运动参数 (Emm 固件)
+ * 电机运动参数 (X 固件梯形曲线加减速位置模式)
  * ============================================================ */
-#define MOTOR_SPEED_RPM         300U    /* 运动速度 (RPM, 0-3000) */
-#define MOTOR_ACCEL_LEVEL       50U     /* 加速档位 (0-255, 0=直接起速, 越大越快) */
-#define MOTOR_MOVE_TIMEOUT_MS   8000U   /* 单段运动超时 (ms) */
+#define MOTOR_SPEED_RPM         20U     /* 最大速度 (RPM, 0-3000) */
+#define MOTOR_ACCEL_RPMS        15U     /* 加速加速度 (RPM/S, 0-65535) */
+#define MOTOR_DECEL_RPMS        15U     /* 减速加速度 (RPM/S, 0-65535) */
+#define MOTOR_MOVE_TIMEOUT_MS   5000U   /* 单段运动超时 (ms) */
 
 /* ============================================================
  * NRF24L01 GPIO (SPI1: PA5=SCK, PA6=MISO, PA7=MOSI)

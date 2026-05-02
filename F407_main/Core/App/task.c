@@ -3,9 +3,9 @@
  * @brief   任务状态机实现
  *
  * 运动执行流程:
- *  1. 计算目标摄像头坐标 (cam_x = laser_x - LASER_OFFSET_X, cam_y = laser_y)
+ *  1. 计算目标平台中心坐标 (cx = laser_x - LASER_OFFSET_X, cy = laser_y)
  *  2. 调用 Kinematics_CamToAngles 得到四电机绝对角度
- *  3. 调用 Motor_MultiPositionCmd 或 Motor_MoveAllSync 发送命令
+ *  3. 启动前先使能电机, 再调用 X 固件梯形曲线位置命令
  *  4. 等待 MOTOR_MOVE_TIMEOUT_MS 后判定到位 (开环)
  */
 #include "task.h"
@@ -78,23 +78,93 @@ static float       s_cam_x      = 0.0f;   /* 当前摄像头坐标 */
 static float       s_cam_y      = 0.0f;
 static float       s_laser_x    = 0.0f;   /* 当前激光坐标 */
 static float       s_laser_y    = 0.0f;
+static float       s_motor_angle[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 static uint8_t     s_moving     = 0;       /* 1=等待电机运动完成 */
 static uint8_t     s_fire_halt  = 0;       /* 检测到火源后暂停计数 */
+static uint8_t     s_motor_enabled = 0;    /* 上电清零后默认松轴 */
+static uint8_t     s_angle_known = 0;      /* 手拉后未知, 回中心后重新可信 */
+static volatile uint8_t s_estop_pending = 0;
+
+static void enable_for_motion(void)
+{
+    if (s_motor_enabled) return;
+    Motor_EnableAll();
+    HAL_Delay(50);
+    s_motor_enabled = 1;
+}
+
+static void calc_sync_speeds(const float target_angles[4], float speeds[4])
+{
+    float max_delta = 0.0f;
+    for (uint8_t i = 0; i < 4; i++) {
+        float d = fabsf(target_angles[i] - s_motor_angle[i]);
+        if (d > max_delta) max_delta = d;
+    }
+
+    if (!s_angle_known || max_delta < 0.1f ||
+        MOTOR_ACCEL_RPMS == 0U || MOTOR_DECEL_RPMS == 0U) {
+        for (uint8_t i = 0; i < 4; i++) speeds[i] = (float)MOTOR_SPEED_RPM;
+        return;
+    }
+
+    float accel = (float)MOTOR_ACCEL_RPMS * 6.0f;  /* RPM/S -> deg/s^2 */
+    float decel = (float)MOTOR_DECEL_RPMS * 6.0f;
+    float vmax  = (float)MOTOR_SPEED_RPM * 6.0f;   /* RPM -> deg/s */
+    float k = (1.0f / accel) + (1.0f / decel);
+    float accel_decel_dist = 0.5f * vmax * vmax * k;
+    float total_time;
+
+    if (max_delta <= accel_decel_dist) {
+        total_time = sqrtf(2.0f * max_delta * k);
+    } else {
+        total_time = (max_delta / vmax) + (0.5f * vmax * k);
+    }
+
+    for (uint8_t i = 0; i < 4; i++) {
+        float d = fabsf(target_angles[i] - s_motor_angle[i]);
+        if (d < 0.1f) {
+            speeds[i] = 1.0f;
+            continue;
+        }
+
+        float disc = total_time * total_time - 2.0f * d * k;
+        if (disc < 0.0f) disc = 0.0f;
+
+        float v = (total_time - sqrtf(disc)) / k;
+        float rpm = v / 6.0f;
+        if (rpm < 1.0f) rpm = 1.0f;
+        if (rpm > (float)MOTOR_SPEED_RPM) rpm = (float)MOTOR_SPEED_RPM;
+        speeds[i] = rpm;
+    }
+}
+
+static void remember_target_angles(const float target_angles[4])
+{
+    for (uint8_t i = 0; i < 4; i++) {
+        s_motor_angle[i] = target_angles[i];
+    }
+    s_angle_known = 1;
+}
 
 /* ============================================================
  * 辅助: 发送平台移动到激光目标 (lx, ly)
  * ============================================================ */
 static void move_to_laser(float lx, float ly)
 {
+    enable_for_motion();
+
     float cx, cy;
     Kinematics_LaserToCam(lx, ly, &cx, &cy);
 
     float angles[4];
     Kinematics_CamToAngles(cx, cy, angles);
 
-    Motor_MultiPositionCmd(angles,
-                           (float)MOTOR_SPEED_RPM,
-                           MOTOR_ACCEL_LEVEL);
+    float speeds[4];
+    calc_sync_speeds(angles, speeds);
+
+    Motor_MultiPositionCmdSpeeds(angles, speeds,
+                                 MOTOR_ACCEL_RPMS,
+                                 MOTOR_DECEL_RPMS);
 
     s_cam_x   = cx;
     s_cam_y   = cy;
@@ -102,6 +172,7 @@ static void move_to_laser(float lx, float ly)
     s_laser_y = ly;
     s_moving  = 1;
     s_move_start = HAL_GetTick();
+    remember_target_angles(angles);
 }
 
 /** 等待电机运动完成 (超时判定到位) */
@@ -116,8 +187,14 @@ static uint8_t wait_done(void)
 void Task_Init(void)
 {
     generate_snake();
-    s_state  = TASK_IDLE;
-    s_moving = 0;
+    s_state         = TASK_IDLE;
+    s_moving        = 0;
+    s_motor_enabled = 0;
+    s_laser_x       = 0.0f;
+    s_laser_y       = 0.0f;
+    Kinematics_LaserToCam(0.0f, 0.0f, &s_cam_x, &s_cam_y);
+    s_angle_known   = 0;
+    for (uint8_t i = 0; i < 4; i++) s_motor_angle[i] = 0.0f;
 }
 
 /* ============================================================
@@ -126,7 +203,7 @@ void Task_Init(void)
 void Task_StartHome(void)
 {
     /* 注意: 此函数从 USART2 中断上下文调用, 不能调用含 HAL_Delay 的函数。
-     * 电机在 main.c 上电时已 EnableAll, 此处直接设置状态即可。 */
+     * 真正的使能和同步回 0 在 Task_Tick 主循环上下文执行。 */
     s_state = TASK_HOME;
     s_moving = 0;
 }
@@ -165,9 +242,9 @@ void Task_StartCalibrate(void)
 
 void Task_EStop(void)
 {
-    Motor_StopAll();
-    s_state  = TASK_E_STOP;
-    s_moving = 0;
+    s_estop_pending = 1;
+    s_state         = TASK_E_STOP;
+    s_moving        = 0;
 }
 
 TaskState_t Task_GetState(void) { return s_state; }
@@ -181,6 +258,17 @@ void Task_Tick(void)
 {
     /* 处理异步蜂鸣 */
     Buzzer_Tick();
+
+    if (s_estop_pending) {
+        Motor_StopAll();
+        Motor_DisableAll();
+        s_motor_enabled = 0;
+        s_angle_known = 0;
+        s_estop_pending = 0;
+        s_state         = TASK_E_STOP;
+        s_moving        = 0;
+        return;
+    }
 
     /* NRF 轮询 */  /* TODO: 暂时禁用, NRF SPI 卡死 */
     if (0 && NrfApp_Poll()) {
@@ -205,21 +293,35 @@ void Task_Tick(void)
 
     /* ---- CALIBRATE ---- */
     case TASK_CALIBRATE:
-        Motor_EnableAll();
-        HAL_Delay(50);
+        /* 只允许在激光点确实位于中心圆时执行。执行后保持松轴。 */
         Motor_ZeroAllPositions();
         Kinematics_Init();
+        Motor_DisableAll();
+        s_motor_enabled = 0;
+        s_angle_known = 1;
+        for (uint8_t i = 0; i < 4; i++) s_motor_angle[i] = 0.0f;
         s_laser_x = 0.0f;
         s_laser_y = 0.0f;
-        s_cam_x   = -LASER_OFFSET_X_CM;
-        s_cam_y   = 0.0f;
+        Kinematics_LaserToCam(0.0f, 0.0f, &s_cam_x, &s_cam_y);
         s_state   = TASK_IDLE;
         break;
 
     /* ---- HOME ---- */
     case TASK_HOME:
         if (!s_moving) {
-            move_to_laser(CIRCLE5_X, CIRCLE5_Y);
+            float zero_angles[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            float speeds[4];
+            calc_sync_speeds(zero_angles, speeds);
+            enable_for_motion();
+            Motor_MoveAllSyncSpeeds(zero_angles, speeds,
+                                     MOTOR_ACCEL_RPMS,
+                                     MOTOR_DECEL_RPMS);
+            Kinematics_LaserToCam(0.0f, 0.0f, &s_cam_x, &s_cam_y);
+            s_laser_x = CIRCLE5_X;
+            s_laser_y = CIRCLE5_Y;
+            s_moving  = 1;
+            s_move_start = HAL_GetTick();
+            remember_target_angles(zero_angles);
         } else if (wait_done()) {
             s_moving = 0;
             s_state  = TASK_IDLE;

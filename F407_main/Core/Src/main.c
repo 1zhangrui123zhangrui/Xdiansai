@@ -43,7 +43,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 /* 取消注释以开启对应测试模式，正常使用时全部保持注释 */
-//#define MOTOR_TEST_ENABLE
+#define MOTOR_TEST_ENABLE
 //#define SCREEN_TEST_ENABLE
 /* USER CODE END PD */
 
@@ -122,13 +122,15 @@ int main(void)
   /* --- 电机 --- */
   Motor_Init(MOTOR_UART);
 
-  /* --- 上电自动标定 ---
-   * 请确保上电前平台已手动放置到中心位置 (激光对准中心圆)
-   * 先使能再清零, 保证命令被电机接受 */
-  Motor_EnableAll();
-  HAL_Delay(500);
+  /* --- 上电中心清零, 然后松轴 ---
+   * 上电前必须手动把激光点放在中心圆。
+   * 此处只把当前位置记为 0 度, 随后关闭使能, 方便评委手动拉到任意位置。
+   * 不要在模块被拉开后再次清零, 否则 0 度就不再对应中心圆。
+   */
   Motor_ZeroAllPositions();
   HAL_Delay(200);
+  Motor_DisableAll();
+  HAL_Delay(100);
 
   /* --- 运动学初始化 (零点已设置) --- */
   Kinematics_Init();
