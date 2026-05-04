@@ -52,8 +52,8 @@
 
 #define TX_ADR_WIDTH    5
 #define RX_ADR_WIDTH    5
-#define TX_PLOAD_WIDTH  4   /* F407→F103 */
-#define RX_PLOAD_WIDTH  6   /* F103→F407: flags+seq+dx+dy (NRF_CamData_t) */
+#define TX_PLOAD_WIDTH  20  /* Unified NRF vision payload */
+#define RX_PLOAD_WIDTH  20  /* Unified NRF vision payload */
 
 // 全局收发缓冲区，在main.c中使用
 extern uint8_t NRF24L01_TxPacket[TX_PLOAD_WIDTH];

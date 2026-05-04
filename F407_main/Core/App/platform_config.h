@@ -129,8 +129,8 @@
 #define NRF_IRQ_PIN     GPIO_PIN_8
 
 /* NRF 有效载荷长度 */
-#define NRF_TX_WIDTH    4U
-#define NRF_RX_WIDTH    8U
+#define NRF_TX_WIDTH    20U
+#define NRF_RX_WIDTH    20U
 
 /* ============================================================
  * 蜂鸣器 GPIO

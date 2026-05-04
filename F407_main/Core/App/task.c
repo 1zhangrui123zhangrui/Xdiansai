@@ -270,17 +270,23 @@ void Task_Tick(void)
         return;
     }
 
-    /* NRF 轮询 */  /* TODO: 暂时禁用, NRF SPI 卡死 */
-    if (0 && NrfApp_Poll()) {
-        /* 在自动巡逻时检测火源 */
-        if (s_state == TASK_AUTO_PATROL && NrfApp_IsFire()) {
-            /* 停止运动, 蜂鸣三声, 记录火源位置
-             * fire_x/y 是 F103 检测到的偏差量, 叠加到当前激光坐标得到实际火源坐标 */
-            Motor_StopAll();
-            Buzzer_Beep(BUZZER_FIRE_BEEPS);
-            /* 火源坐标 = 检测到火源时的激光坐标 (由 F407 运动学直接计算) */
-            Screen_RecordFire(s_laser_x, s_laser_y);
-            s_fire_halt = 1;
+    /* NRF 轮询 */
+    if (NrfApp_Poll()) {
+        /* 收到火源后蜂鸣；自动巡逻时同时停止并记录火源坐标 */
+        if (NrfApp_IsFire()) {
+            float fire_x;
+            float fire_y;
+
+            if (s_state == TASK_AUTO_PATROL) {
+                Motor_StopAll();
+                s_fire_halt = 1;
+            }
+            Buzzer_BeepAsync(BUZZER_FIRE_BEEPS);
+            for (uint8_t i = 0; i < NrfApp_GetFireCount(); i++) {
+                if (NrfApp_GetFireCm(i, &fire_x, &fire_y)) {
+                    Screen_RecordFire(fire_x, fire_y);
+                }
+            }
         }
     }
 

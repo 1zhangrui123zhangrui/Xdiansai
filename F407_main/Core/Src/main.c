@@ -43,7 +43,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 /* 取消注释以开启对应测试模式，正常使用时全部保持注释 */
-#define MOTOR_TEST_ENABLE
+//#define MOTOR_TEST_ENABLE
 //#define SCREEN_TEST_ENABLE
 /* USER CODE END PD */
 
@@ -147,7 +147,7 @@ int main(void)
 #endif
 
   /* --- NRF --- */
-  // NrfApp_Init();  /* TODO: SPI 卡死, 暂时禁用以测试电机 */
+  NrfApp_Init();
 
   /* --- 蜂鸣器 --- */
   Buzzer_Init();
@@ -169,7 +169,11 @@ int main(void)
     /* 每 100ms 上报坐标到串口屏 */
     if (HAL_GetTick() - last_coord_ms >= COORD_UPDATE_INTERVAL_MS) {
         last_coord_ms = HAL_GetTick();
-        Screen_SetCoord(Task_GetLaserX(), Task_GetLaserY());
+        if (NrfApp_HasValidPosition()) {
+            Screen_SetCoord(NrfApp_GetPlatformXCm(), NrfApp_GetPlatformYCm());
+        } else {
+            Screen_SetCoord(Task_GetLaserX(), Task_GetLaserY());
+        }
     }
 
     /* USER CODE END WHILE */
