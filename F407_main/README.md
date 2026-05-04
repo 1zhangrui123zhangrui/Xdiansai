@@ -79,18 +79,19 @@ Core/
 
 | 参数               | 说明                         | 默认值    |
 |------------------|----------------------------|--------|
-| `ROPE_H_CM`      | 滑轮顶部到平台竖直距离 (cm)   | 7.5    |
-| `SPOOL_RADIUS_CM`| 绕线轮半径 (cm)              | 3.5    |
+| `ROPE_H_CM`      | 滑轮顶部到平台竖直距离 (cm)   | 2.5    |
+| `SPOOL_RADIUS_CM`| 绕线轮半径 (cm)，直径 3.5cm | 1.75   |
 | `LASER_OFFSET_X_CM` | 激光点相对平台中心 X 偏移 (cm) | 3.5    |
-| `MOTOR_SPEED_RPM` | 最大速度 (RPM)              | 20     |
-| `MOTOR_ACCEL_RPMS`  | 加速加速度 (RPM/S)          | 15     |
-| `MOTOR_DECEL_RPMS`  | 减速加速度 (RPM/S)          | 15     |
-| `MOTOR_MOVE_TIMEOUT_MS` | 运动超时 (ms)           | 5000   |
+| `MOTOR_SPEED_RPM` | 最大速度 (RPM)              | 10     |
+| `MOTOR_ACCEL_RPMS`  | 加速加速度 (RPM/S)          | 10     |
+| `MOTOR_DECEL_RPMS`  | 减速加速度 (RPM/S)          | 10     |
+| `MOTOR_MOVE_TIMEOUT_MS` | 运动超时 (ms)           | 30000  |
 
 > **上电前必须先把激光点手动放在中心圆。** F407 上电后会立刻把当前位置清零为 0 度，然后关闭使能保持松轴；按「启动」后再使能并同步回 0 度。
 > 激光点在中心圆 `(0,0)` 时，平台中心按 `(-3.5, 0)` 参与绳长计算，四个挂点再相对平台中心偏移 `±5cm`。
 
 当前暂时关闭开环坐标标定补偿，先以真实高度和机械张紧状态为准；补偿参数保留在 `platform_config.h` 的 `KINEMATICS_CALIB_*` 中。
+
 
 ## 七、NRF 数据包协议 (F103→F407, 8 字节)
 

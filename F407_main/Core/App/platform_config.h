@@ -46,10 +46,10 @@
 
 /* 绳子竖直分量 (cm)
  * 出线点到平台挂点的垂直高度差。高度必须接近真实值, 否则大范围移动会失张力/歪斜。 */
-#define ROPE_H_CM           7.5f
+#define ROPE_H_CM           5.0f
 
-/* 绕线轮半径 (cm): 实测 35mm = 3.5cm */
-#define SPOOL_RADIUS_CM     3.5f
+/* 绕线轮半径 (cm): 实测直径 3.5cm, 半径 1.75cm */
+#define SPOOL_RADIUS_CM     1.75f
 
 /* 激光点相对平台中心的 X 偏移 (cm)
  * 激光点在中心圆 (0,0) 时, 平台中心在 (-3.5, 0)。 */
@@ -74,11 +74,11 @@
  *   cmd_x = 1.731325 * target_x - 0.027438 * target_y
  *   cmd_y = 0.019206 * target_x + 1.901439 * target_y
  */
-#define KINEMATICS_CALIB_ENABLE     0U
-#define KINEMATICS_CALIB_XX         ( 1.731325f)
-#define KINEMATICS_CALIB_XY         (-0.027438f)
-#define KINEMATICS_CALIB_YX         ( 0.019206f)
-#define KINEMATICS_CALIB_YY         ( 1.901439f)
+#define KINEMATICS_CALIB_ENABLE     1U
+#define KINEMATICS_CALIB_XX         ( 0.904673f)
+#define KINEMATICS_CALIB_XY         (-0.030872f)
+#define KINEMATICS_CALIB_YX         (-0.051452f)
+#define KINEMATICS_CALIB_YY         ( 0.926697f)
 
 /* 电机方向修正: 1=正常, -1=反向 */
 #define MOTOR1_DIR_SIGN     ( 1.0f)
@@ -112,10 +112,10 @@
 /* ============================================================
  * 电机运动参数 (X 固件梯形曲线加减速位置模式)
  * ============================================================ */
-#define MOTOR_SPEED_RPM         20U     /* 最大速度 (RPM, 0-3000) */
-#define MOTOR_ACCEL_RPMS        15U     /* 加速加速度 (RPM/S, 0-65535) */
-#define MOTOR_DECEL_RPMS        15U     /* 减速加速度 (RPM/S, 0-65535) */
-#define MOTOR_MOVE_TIMEOUT_MS   5000U   /* 单段运动超时 (ms) */
+#define MOTOR_SPEED_RPM         10U     /* 最大速度 (RPM, 0-3000) */
+#define MOTOR_ACCEL_RPMS        10U     /* 加速加速度 (RPM/S, 0-65535) */
+#define MOTOR_DECEL_RPMS        10U     /* 减速加速度 (RPM/S, 0-65535) */
+#define MOTOR_MOVE_TIMEOUT_MS   30000U  /* 单段运动超时 (ms) */
 
 /* ============================================================
  * NRF24L01 GPIO (SPI1: PA5=SCK, PA6=MISO, PA7=MOSI)
@@ -138,8 +138,8 @@
  * ============================================================ */
 #define BUZZER_GPIO_PORT    GPIOB
 #define BUZZER_GPIO_PIN     GPIO_PIN_8
-#define BUZZER_ON_LEVEL     GPIO_PIN_SET
-#define BUZZER_OFF_LEVEL    GPIO_PIN_RESET
+#define BUZZER_ON_LEVEL     GPIO_PIN_RESET
+#define BUZZER_OFF_LEVEL    GPIO_PIN_SET
 #define BUZZER_BEEP_ON_MS   300U
 #define BUZZER_BEEP_OFF_MS  200U
 #define BUZZER_FIRE_BEEPS   3U

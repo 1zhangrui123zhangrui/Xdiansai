@@ -23,13 +23,13 @@
 
 | 宏 | 含义 | 默认值 | 说明 |
 |----|------|--------|------|
-| `ROPE_H_CM` | 滑轮到平台竖直距离 (cm) | `7.5` | 按实际高度差继续标定 |
-| `SPOOL_RADIUS_CM` | 绕线轮半径 (cm) | `3.5` | 实测 35mm |
+| `ROPE_H_CM` | 滑轮到平台竖直距离 (cm) | `2.5` | 按实际高度差继续标定 |
+| `SPOOL_RADIUS_CM` | 绕线轮半径 (cm) | `1.75` | 实测直径 3.5cm |
 | `LASER_OFFSET_X_CM` | 激光点距平台中心 X 偏移 (cm) | `3.5` | 激光在中心时平台中心为 (-3.5, 0) |
-| `MOTOR_SPEED_RPM` | 运动速度 (RPM) | `20` | 调低可更稳 |
-| `MOTOR_ACCEL_RPMS` | 加速加速度 RPM/S | `15` | X 固件梯形曲线参数 |
-| `MOTOR_DECEL_RPMS` | 减速加速度 RPM/S | `15` | X 固件梯形曲线参数 |
-| `MOTOR_MOVE_TIMEOUT_MS` | 运动超时 (ms) | `5000` | 按实际调整 |
+| `MOTOR_SPEED_RPM` | 运动速度 (RPM) | `10` | 调低可更稳 |
+| `MOTOR_ACCEL_RPMS` | 加速加速度 RPM/S | `10` | X 固件梯形曲线参数 |
+| `MOTOR_DECEL_RPMS` | 减速加速度 RPM/S | `10` | X 固件梯形曲线参数 |
+| `MOTOR_MOVE_TIMEOUT_MS` | 运动超时 (ms) | `30000` | 按实际调整 |
 | `MOTOR_ID_1~4` | 电机地址 | `1~4` | 需与电机拨码一致 |
 
 ---
@@ -58,6 +58,7 @@ Motor_Init(&huart1);
 Motor_EnableAll();
 Motor_StopAll();
 Motor_DisableAll();
+
 
 // 标定: 激光点在中心圆时调用, 将所有电机当前位置角度清零
 Motor_ZeroAllPositions();

@@ -12,35 +12,31 @@
 #include <stdint.h>
 
 /* 1=只断使能松轴; 0=执行坐标移动测试 */
-#define MOTOR_TEST_DISABLE_ONLY  1U
+#define MOTOR_TEST_DISABLE_ONLY  0U
 
 #if !MOTOR_TEST_DISABLE_ONLY
 /* ---- 参数 ---- */
 
 /* 移动速度 (RPM): 调低便于观察 */
-#define COORD_TEST_SPEED_RPM    20U
+#define COORD_TEST_SPEED_RPM    10U
 
 /* 梯形曲线加/减速度 (RPM/S) */
-#define COORD_TEST_ACCEL_RPMS   15U
-#define COORD_TEST_DECEL_RPMS   15U
+#define COORD_TEST_ACCEL_RPMS   10U
+#define COORD_TEST_DECEL_RPMS   10U
 
 /* 到达每个坐标后停留时间 (ms) */
 #define COORD_TEST_DWELL_MS     5000U
 
 /* 每段运动等待超时 (ms): 一次到位, 给足观察裕量 */
-#define COORD_TEST_MOVE_MS      5000U
+#define COORD_TEST_MOVE_MS      30000U
 
 /* ---- 测试坐标表 (激光坐标, cm) ---- */
-/* 依次到达各标定点, 每点停留后记录实际激光坐标 */
+/* 上电中心清零后, 只测试四个角点, 最后回中心。 */
 static const float k_test_points[][2] = {
-    { 20.0f,   0.0f},   /* 右 */
-    {  0.0f,  20.0f},   /* 上 */
-    {-20.0f,   0.0f},   /* 左 */
-    {  0.0f, -20.0f},   /* 下 */
-    { 20.0f,  20.0f},   /* 右上 */
-    { 20.0f, -20.0f},   /* 右下 */
-    {-20.0f,  20.0f},   /* 左上 */
     {-20.0f, -20.0f},   /* 左下 */
+    { 20.0f, -20.0f},   /* 右下 */
+    { 20.0f,  20.0f},   /* 右上 */
+    {-20.0f,  20.0f},   /* 左上 */
     {  0.0f,   0.0f},   /* 中心 */
 };
 #define TEST_POINT_CNT  (sizeof(k_test_points) / sizeof(k_test_points[0]))
