@@ -161,4 +161,16 @@
 #define AUTO_PATROL_Y_MAX_CM        ( 20.0f)
 #define POSITION_TOL_CM             2.0f
 
+/* ============================================================
+ * 视觉闭环修正参数
+ * 流程: 开环运动 -> 停稳 -> 采 3 帧视觉坐标 -> 小步补偿 -> 再确认
+ * ============================================================ */
+#define CLOSED_LOOP_ENABLE              1U
+#define CLOSED_LOOP_SETTLE_MS           250U
+#define CLOSED_LOOP_SAMPLE_TIMEOUT_MS   1000U
+#define CLOSED_LOOP_SAMPLE_COUNT        3U
+#define CLOSED_LOOP_MAX_CORRECTIONS     2U
+#define CLOSED_LOOP_GAIN                0.70f
+#define CLOSED_LOOP_MAX_STEP_CM         5.0f
+
 #endif /* __PLATFORM_CONFIG_H */

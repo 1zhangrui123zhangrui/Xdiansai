@@ -71,6 +71,11 @@ uint8_t NrfApp_HasValidPosition(void)
     return (s_data.flags & NRF_FLAG_POS_VALID) ? 1U : 0U;
 }
 
+uint8_t NrfApp_IsEstimatedPosition(void)
+{
+    return (s_data.flags & NRF_FLAG_POS_EST) ? 1U : 0U;
+}
+
 float NrfApp_GetPlatformXCm(void)
 {
     return (float)s_data.platform_x_mm * 0.1f;

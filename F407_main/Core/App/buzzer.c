@@ -38,6 +38,13 @@ void Buzzer_Beep(uint8_t times)
 
 void Buzzer_BeepAsync(uint8_t times)
 {
+    if (times == 0U) {
+        s_pending_beeps = 0;
+        s_beep_phase    = 0;
+        Buzzer_Off();
+        return;
+    }
+
     s_pending_beeps = times;
     s_beep_phase    = 1;
     s_last_tick     = HAL_GetTick();
@@ -68,4 +75,9 @@ void Buzzer_Tick(void)
         s_beep_phase = 1;
         Buzzer_On();
     }
+}
+
+uint8_t Buzzer_IsBusy(void)
+{
+    return (s_pending_beeps != 0U) ? 1U : 0U;
 }

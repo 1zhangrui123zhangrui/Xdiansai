@@ -29,4 +29,7 @@ void Buzzer_Tick(void);
  */
 void Buzzer_BeepAsync(uint8_t times);
 
+/** 判断当前是否仍在执行蜂鸣序列 */
+uint8_t Buzzer_IsBusy(void);
+
 #endif /* __BUZZER_H */

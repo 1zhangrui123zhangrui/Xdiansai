@@ -6,7 +6,7 @@
  *  Byte 0:    0xA5
  *  Byte 1:    flags
  *  Byte 2:    seq
- *  Byte 3-6:  platform_x/y_mm (int16 little-endian)
+ *  Byte 3-6:  laser_x/y_mm (int16 little-endian)
  *  Byte 7-14: fire1_x/y_mm, fire2_x/y_mm (int16 little-endian)
  *  Byte 15:   fire_count
  *  Byte 16-17: fire scores (0-100)
@@ -31,8 +31,8 @@ typedef struct {
     uint8_t  head;
     uint8_t  flags;
     uint8_t  seq;
-    int16_t  platform_x_mm;
-    int16_t  platform_y_mm;
+    int16_t  platform_x_mm;  /* actually laser X, kept for ABI compatibility */
+    int16_t  platform_y_mm;  /* actually laser Y, kept for ABI compatibility */
     int16_t  fire_x_mm[2];
     int16_t  fire_y_mm[2];
     uint8_t  fire_count;
@@ -60,6 +60,7 @@ uint8_t NrfApp_IsFire(void);
 
 /** 获取视觉定位/火源世界坐标 (cm) */
 uint8_t NrfApp_HasValidPosition(void);
+uint8_t NrfApp_IsEstimatedPosition(void);
 float NrfApp_GetPlatformXCm(void);
 float NrfApp_GetPlatformYCm(void);
 uint8_t NrfApp_GetFireCount(void);
