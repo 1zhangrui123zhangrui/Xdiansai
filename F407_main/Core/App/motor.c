@@ -18,6 +18,11 @@
 #define MOTOR_CMD_MULTI         0xAAU
 #define MOTOR_X_POS_CMD_LEN     16U
 #define MOTOR_X_SPEED_MAX_01RPM 30000U
+#define MOTOR_CMD_READ_POSITION 0x36U
+#define MOTOR_CMD_READ_ERROR    0x37U
+#define MOTOR_CMD_READ_STATUS   0x3AU
+#define MOTOR_STATUS_REACHED    0x02U
+#define MOTOR_RX_TIMEOUT_MS     20U
 
 static UART_HandleTypeDef *s_huart = NULL;
 
@@ -26,6 +31,39 @@ static UART_HandleTypeDef *s_huart = NULL;
 static void send(const uint8_t *buf, uint16_t len)
 {
     HAL_UART_Transmit(s_huart, (uint8_t *)buf, len, 50U);
+}
+
+static void clear_rx_fifo(void)
+{
+    __HAL_UART_CLEAR_OREFLAG(s_huart);
+    while (__HAL_UART_GET_FLAG(s_huart, UART_FLAG_RXNE)) {
+        (void)s_huart->Instance->DR;
+    }
+}
+
+static uint8_t query(uint8_t id, uint8_t cmd, uint8_t *rx, uint16_t rx_len)
+{
+    uint8_t tx[3] = {id, cmd, MOTOR_CHECKSUM};
+
+    clear_rx_fifo();
+    if (HAL_UART_Transmit(s_huart, tx, sizeof(tx), 20U) != HAL_OK) {
+        return 0;
+    }
+    if (HAL_UART_Receive(s_huart, rx, rx_len, MOTOR_RX_TIMEOUT_MS) != HAL_OK) {
+        return 0;
+    }
+    if (rx[0] != id || rx[1] != cmd || rx[rx_len - 1U] != MOTOR_CHECKSUM) {
+        return 0;
+    }
+    return 1;
+}
+
+static int32_t read_i32_be(const uint8_t *p)
+{
+    return (int32_t)(((uint32_t)p[0] << 24) |
+                     ((uint32_t)p[1] << 16) |
+                     ((uint32_t)p[2] << 8) |
+                     (uint32_t)p[3]);
 }
 
 static uint16_t clamp_u16(uint32_t value)
@@ -128,6 +166,74 @@ void Motor_StopAll(void)
 {
     uint8_t buf[] = {MOTOR_ID_BROADCAST, 0xFEU, 0x98U, 0x00U, MOTOR_CHECKSUM};
     send(buf, sizeof(buf));
+}
+
+uint8_t Motor_ReadStatus(uint8_t id, uint8_t *status_flags)
+{
+    uint8_t rx[4];
+
+    if (status_flags == NULL) {
+        return 0;
+    }
+    if (!query(id, MOTOR_CMD_READ_STATUS, rx, sizeof(rx))) {
+        return 0;
+    }
+
+    *status_flags = rx[2];
+    return 1;
+}
+
+uint8_t Motor_IsReached(uint8_t id)
+{
+    uint8_t status = 0;
+
+    if (!Motor_ReadStatus(id, &status)) {
+        return 0;
+    }
+    return ((status & MOTOR_STATUS_REACHED) != 0U) ? 1U : 0U;
+}
+
+uint8_t Motor_AllReached(void)
+{
+    for (uint8_t id = MOTOR_ID_1; id <= MOTOR_ID_4; id++) {
+        if (!Motor_IsReached(id)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+uint8_t Motor_ReadPositionDeg(uint8_t id, float *angle_deg)
+{
+    uint8_t rx[8];
+    int32_t raw;
+    float sign;
+
+    if (angle_deg == NULL) {
+        return 0;
+    }
+    if (!query(id, MOTOR_CMD_READ_POSITION, rx, sizeof(rx))) {
+        return 0;
+    }
+
+    sign = (rx[2] == 0x01U) ? -1.0f : 1.0f;
+    raw = read_i32_be(&rx[3]);
+    *angle_deg = sign * ((float)raw / 10.0f) * motor_dir_sign(id);
+    return 1;
+}
+
+uint8_t Motor_ReadAllPositions(float angle_deg[4])
+{
+    if (angle_deg == NULL) {
+        return 0;
+    }
+
+    for (uint8_t i = 0; i < 4; i++) {
+        if (!Motor_ReadPositionDeg((uint8_t)(MOTOR_ID_1 + i), &angle_deg[i])) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 void Motor_ZeroPosition(uint8_t id)

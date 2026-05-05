@@ -17,7 +17,8 @@
 #define CMD_AREA_PATROL     0xA2U   /* 区域巡逻 */
 #define CMD_SEQ_PATROL      0xA3U   /* 顺序巡逻 (后跟 5 字节 ASCII + 0xFE) */
 #define CMD_AUTO_PATROL     0xA4U   /* 自动巡逻 */
-#define CMD_CALIBRATE       0xA5U   /* 标定 */
+#define CMD_MOTOR_ENABLE    0xA5U   /* 电机使能/抱轴 */
+#define CMD_MOTOR_DISABLE   0xA6U   /* 电机失能/松轴 */
 
 typedef void (*ScreenCmdCallback_t)(void);
 typedef void (*ScreenSeqCallback_t)(uint8_t *seq);  /* seq[5]: 1-5 */
@@ -29,6 +30,9 @@ uint8_t Screen_GetCurrentPage(void);
 
 /** 每 100ms 调用, 刷新当前页面坐标控件 tX / tY */
 void Screen_SetCoord(float x, float y);
+
+/** 坐标丢失时显示 LOST */
+void Screen_SetCoordLost(void);
 
 /** 记录火源坐标并发送到屏 (最多 2 个) */
 void Screen_RecordFire(float x, float y);

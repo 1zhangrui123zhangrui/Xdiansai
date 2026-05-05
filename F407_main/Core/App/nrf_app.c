@@ -7,6 +7,7 @@
 
 static NRF_CamData_t s_data = {0};
 static uint8_t       s_fire_flag = 0;
+static uint8_t       s_have_frame = 0;
 
 static uint8_t checksum_xor(const uint8_t *data, uint8_t len)
 {
@@ -47,6 +48,7 @@ uint8_t NrfApp_Poll(void)
     }
 
     s_data = frame;
+    s_have_frame = 1;
 
     if (s_data.flags & NRF_FLAG_FIRE) {
         s_fire_flag = 1;
@@ -57,6 +59,11 @@ uint8_t NrfApp_Poll(void)
 const NRF_CamData_t *NrfApp_GetData(void)
 {
     return &s_data;
+}
+
+uint8_t NrfApp_HasReceivedFrame(void)
+{
+    return s_have_frame;
 }
 
 uint8_t NrfApp_IsFire(void)

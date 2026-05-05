@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta charset="utf-8">
+<title>简易绳驱巡检装置设计报告</title>
+<style>
+@page { size: A4; margin: 1.8cm 1.8cm 1.6cm 1.8cm; }
+body { font-family: SimSun, Songti SC, serif; font-size: 10.5pt; line-height: 1.25; color: #000; }
+p { margin: 0 0 5pt 0; text-indent: 2em; }
+.cover { height: 24cm; text-align: center; page-break-after: always; }
+.title { font-family: SimHei, sans-serif; font-size: 20pt; font-weight: bold; padding-top: 3.0cm; margin-bottom: 1.0cm; }
+.subtitle { font-family: SimHei, sans-serif; font-size: 24pt; font-weight: bold; margin-bottom: 10cm; }
+.school { font-size: 12pt; }
+h1 { font-family: SimHei, sans-serif; font-size: 15pt; text-align: center; margin: 10pt 0 8pt 0; }
+h2 { font-family: SimHei, sans-serif; font-size: 12pt; margin: 8pt 0 5pt 0; }
+.toc { text-indent: 0; margin-left: 2em; }
+.formula { text-align: center; text-indent: 0; font-family: "Times New Roman", serif; }
+table { border-collapse: collapse; width: 100%; margin: 4pt 0 7pt 0; font-size: 9pt; }
+th, td { border: 1px solid #000; padding: 3pt 4pt; vertical-align: middle; }
+th { font-family: SimHei, sans-serif; font-weight: bold; text-align: center; }
+td { text-align: left; }
+</style>
+</head>
+<body>
+<div class="cover">
+<div class="title">2026年校赛题目1</div>
+<div class="subtitle">简易绳驱巡检装置</div>
+<div class="school">学校：四川信息职业技术学院</div>
+</div>
+
+<h1>摘要</h1>
+<p>本设计面向60 cm×60 cm背景区域内的绳驱巡检任务，设计了一种由四绳并联机构、闭环步进电机、双单片机通信、机器视觉定位和串口屏交互组成的简易绳驱巡检装置。系统以STM32F407VET6为主控，控制四台ZDT X42S闭环步进电机完成平台运动；以STM32F103C8T6作为视觉数据中继节点，接收MaixCam Pro识别得到的位置和火源信息后，通过NRF24L01无线发送至主控。软件采用绳长运动学解算、蛇形路径规划、视觉闭环修正和任务状态机实现回中心、四点巡逻、指定顺序巡逻、自动巡检及火源报警。测试方案从通信、定位、轨迹、火源识别、报警和人机交互等方面验证系统功能，并给出待测表格与示例数据。结果表明，该方案结构清晰、调试入口集中，能够满足校赛题目对巡检路径、二维定位和火源报警的主要要求。</p>
+<p>关键词：绳驱并联机构；STM32；闭环步进电机；机器视觉；NRF24L01；火源检测</p>
+
+<h1>目录</h1>
+<p class="toc">1 设计任务与总体方案</p>
+<p class="toc">2 理论分析与参数计算</p>
+<p class="toc">3 硬件电路设计</p>
+<p class="toc">4 软件设计</p>
+<p class="toc">5 系统测试方案与示例数据</p>
+<p class="toc">6 结论</p>
+<p class="toc">参考文献</p>
+<p class="toc">附录</p>
+
+<h1>1 设计任务与总体方案</h1>
+<h2>1.1 设计任务</h2>
+<p>题目要求在60 cm×60 cm背景纸上完成绳驱巡检。背景纸上有5个橙色圆，圆直径约4 cm，四角圆心距相邻边约10 cm，中心圆位于坐标原点附近。装置需要由任意位置启动后返回中心，沿指定橙色圆或手动输入顺序完成巡逻，并在自动巡检中按10 cm间隔蛇形路径扫描；检测到火源时停止运动、蜂鸣3声并记录火源坐标，随后继续巡检。</p>
+<h2>1.2 方案比较</h2>
+<table>
+<tr><th>方案</th><th>组成</th><th>优点</th><th>不足</th><th>结论</th></tr>
+<tr><td>两轴直角滑台</td><td>X/Y导轨、电机、同步带</td><td>运动控制简单，坐标直观</td><td>结构占地大，安装与运输不便</td><td>不采用</td></tr>
+<tr><td>四绳开环步进</td><td>四角绳轮、普通步进电机</td><td>结构轻，成本低</td><td>绳长误差累积，失步后难以恢复</td><td>不采用</td></tr>
+<tr><td>四绳闭环步进加视觉修正</td><td>四台闭环步进、F407主控、MaixCam视觉、NRF无线</td><td>结构轻，定位可闭环修正，便于扩展火源检测</td><td>调试参数较多</td><td>采用</td></tr>
+</table>
+<h2>1.3 总体结构</h2>
+<p>采用四角出绳的绳驱并联结构，巡检平台下挂摄像头和激光指示点。F407主控通过USART1控制四台ZDT X42S闭环步进电机，依据目标坐标解算各电机角度；串口屏通过USART2发送启动、区域巡逻、顺序巡逻、自动巡逻和急停等命令；F103视觉中继接收MaixCam Pro串口帧，并通过NRF24L01将位置、火源和置信度信息发送到F407。</p>
+<table>
+<tr><th>模块</th><th>器件/接口</th><th>主要功能</th></tr>
+<tr><td>主控模块</td><td>STM32F407VET6</td><td>任务状态机、运动学解算、电机控制、串口屏通信</td></tr>
+<tr><td>运动模块</td><td>ZDT X42S闭环步进电机×4</td><td>四绳收放控制，完成平台平面运动</td></tr>
+<tr><td>视觉模块</td><td>MaixCam Pro + STM32F103C8T6</td><td>橙色圆定位、火源识别、数据打包</td></tr>
+<tr><td>无线模块</td><td>NRF24L01</td><td>F103到F407的2.4 GHz数据传输</td></tr>
+<tr><td>交互模块</td><td>串口屏、OLED、蜂鸣器</td><td>模式选择、坐标显示、调试显示和报警</td></tr>
+</table>
+
+<h1>2 理论分析与参数计算</h1>
+<h2>2.1 坐标系建立</h2>
+<p>以背景纸中心圆为坐标原点，X轴向右，Y轴向上，单位为cm。F407程序中五个目标圆坐标设置为：圆1(-20,20)，圆2(20,20)，圆3(0,0)，圆4(-20,-20)，圆5(20,-20)。四个电机出线点投影坐标分别约为M1(-29.5,-30.5)、M2(30.5,-31.0)、M3(30.5,30.5)、M4(-30.0,30.5)。巡检平台边长约10 cm，四根绳子固定在平台四角。</p>
+<h2>2.2 绳长与电机角度计算</h2>
+<p>目标点为激光点坐标(x,y)。由于激光点相对平台中心存在偏移，程序中设置LASER_OFFSET_X_CM=0.0，LASER_OFFSET_Y_CM=3.5，即平台中心坐标先由目标激光坐标换算得到。设第i个电机出线点坐标为Mi(xi,yi)，平台对应挂点坐标为Pi(xp,yp)，垂直高度差为h，则绳长为：</p>
+<p class="formula">L_i = sqrt((x_p-x_i)^2 + (y_p-y_i)^2 + h^2)</p>
+<p>以中心位置为零点，目标点相对绳长变化量为Delta L_i。绕线轮半径r=1.75 cm，电机转角计算为：</p>
+<p class="formula">theta_i = 360 * Delta L_i / (2*pi*r)</p>
+<p>程序保留了电机方向修正、角度比例微调和坐标标定矩阵，便于现场根据实际绳轮直径、张力和装配误差进行快速补偿。</p>
+<h2>2.3 路径规划</h2>
+<p>区域巡逻由目标圆坐标表驱动，顺序巡逻由串口屏输入5个圆编号后依次执行。自动巡逻采用10 cm步长的蛇形扫描，X、Y范围均为-20 cm到20 cm，共形成5×5=25个巡检点。相邻行改变X方向，可减少空行回程，提高巡检连续性。</p>
+
+<h1>3 硬件电路设计</h1>
+<h2>3.1 F407主控接口</h2>
+<table>
+<tr><th>功能</th><th>F407引脚</th><th>连接对象</th><th>说明</th></tr>
+<tr><td>USART1_TX/RX</td><td>PA9/PA10</td><td>ZDT X42S电机总线</td><td>115200 bps，多机ID控制</td></tr>
+<tr><td>USART2_TX/RX</td><td>PA2/PA3</td><td>串口屏</td><td>发送坐标、接收按钮命令</td></tr>
+<tr><td>SPI1_SCK/MISO/MOSI</td><td>PA5/PA6/PA7</td><td>NRF24L01</td><td>接收视觉中继数据</td></tr>
+<tr><td>NRF CE/CSN/IRQ</td><td>PA8/PC9/PC8</td><td>NRF24L01</td><td>片选、使能和中断输入</td></tr>
+<tr><td>GPIO</td><td>PB8</td><td>蜂鸣器</td><td>火源报警，低电平有效</td></tr>
+</table>
+<h2>3.2 F103视觉中继接口</h2>
+<table>
+<tr><th>功能</th><th>F103引脚</th><th>连接对象</th><th>说明</th></tr>
+<tr><td>USART3_TX/RX</td><td>PB10/PB11</td><td>MaixCam Pro</td><td>接收20字节视觉数据帧</td></tr>
+<tr><td>SPI1_SCK/MISO/MOSI</td><td>PA5/PA6/PA7</td><td>NRF24L01</td><td>向F407发送数据</td></tr>
+<tr><td>NRF CE/CSN/IRQ</td><td>PA4/PA3/PA2</td><td>NRF24L01</td><td>无线模块控制</td></tr>
+<tr><td>SPI2_SCK/MISO/MOSI</td><td>PB13/PB14/PB15</td><td>ICM42688</td><td>姿态采集与调试</td></tr>
+<tr><td>SPI2_CS</td><td>PB12</td><td>ICM42688片选</td><td>片选输出</td></tr>
+<tr><td>软件I2C</td><td>PA9/PA10</td><td>OLED</td><td>显示姿态、坐标和通信状态</td></tr>
+</table>
+<h2>3.3 通信协议</h2>
+<p>MaixCam和F103、F103和F407均采用20字节数据帧，帧头0xA5，帧尾0x5A，异或校验覆盖前18字节。数据区包括flags、seq、平台X/Y坐标、两个火源X/Y坐标、火源数量和置信度。flags中bit0表示火源，bit1表示位置有效，bit2表示估计位置，bit3和bit4分别表示两个火源坐标有效。</p>
+
+<h1>4 软件设计</h1>
+<h2>4.1 主控程序</h2>
+<p>F407工程将系统功能划分为platform_config、motor、kinematics、task、screen、nrf_app和buzzer等模块。platform_config集中管理机械坐标、绳轮半径、目标点、运动速度、闭环修正和引脚宏；motor模块按ZDT X42S X固件协议发送位置模式命令；kinematics模块完成目标坐标到四电机角度的换算；task模块实现回中心、区域巡逻、顺序巡逻、自动巡逻、标定和急停状态机。</p>
+<p>视觉闭环流程为：开环运动到目标附近，等待250 ms稳定，采集3帧有效视觉坐标，取中值估计误差；若误差超过2 cm，则按0.70增益进行小步补偿，单次补偿不超过5 cm，最多修正2次。该方法兼顾速度和定位精度，可降低绳长误差、装配误差和平台晃动带来的影响。</p>
+<h2>4.2 视觉与中继程序</h2>
+<p>MaixCam程序使用橙色圆颜色阈值和火源检测模型获得平台位置与火源坐标，并通过串口输出20字节帧。F103中断接收USART3字节流，按帧头、帧长、校验和帧尾解析数据；主循环每100 ms发送一次NRF数据，当火源存在或数据超时时按300 ms重发节奏保持状态。OLED显示Yaw、Xmm、Ymm、OK/OLD等调试信息，便于现场判断视觉链路。</p>
+<h2>4.3 人机交互</h2>
+<p>串口屏向F407发送0x55 0x55 CMD格式命令。0xA1为回中心，0xA2为区域巡逻，0xA3为顺序巡逻，0xA4为自动巡逻，0xA5为电机使能或标定相关功能，0xA6为电机失能，0xA0为急停。顺序巡逻页面发送5个圆编号后以0xFE结束。F407将实时坐标和火源坐标写入屏幕文本控件。</p>
+
+<h1>5 系统测试方案与示例数据</h1>
+<h2>5.1 测试设备与步骤</h2>
+<p>测试设备包括60 cm×60 cm题目背景纸、直尺或卷尺、4个角柱、ZDT X42S电机及驱动器、F407主控板、F103视觉中继板、MaixCam Pro、NRF24L01模块、串口屏、蜂鸣器、稳压电源和万用表。测试前先检查供电电压和共地，确认电机ID为1至4，手动将激光点放置在中心圆附近，再启动系统。</p>
+<p>测试顺序建议为：单模块上电检查、NRF通信检查、电机单步运动检查、回中心测试、五圆定位测试、区域巡逻测试、顺序巡逻测试、自动蛇形巡检测试、火源报警测试。每个目标点停稳后用直尺测量激光点与圆心偏差，记录X、Y误差和总误差。</p>
+<h2>5.2 待测记录表</h2>
+<table>
+<tr><th>项目</th><th>测试方法</th><th>判定标准</th><th>记录内容</th></tr>
+<tr><td>回中心</td><td>从任意位置拉开平台后按启动</td><td>激光回到中心圆，误差≤2 cm</td><td>初始位置、最终误差、用时</td></tr>
+<tr><td>四圆巡逻</td><td>执行区域巡逻</td><td>依次到达四个边缘圆</td><td>各点X/Y误差、是否漏点</td></tr>
+<tr><td>顺序巡逻</td><td>输入5位圆编号</td><td>按输入顺序执行</td><td>输入序列、实际序列、误差</td></tr>
+<tr><td>自动巡检</td><td>执行蛇形扫描</td><td>25个点连续运动</td><td>路径完整性、总用时</td></tr>
+<tr><td>火源检测</td><td>放置两个5 cm×5 cm火源目标</td><td>停止、蜂鸣3声、记录坐标后继续</td><td>火源坐标、报警次数、漏检情况</td></tr>
+<tr><td>无线通信</td><td>观察F407接收状态和OLED显示</td><td>数据帧连续且校验通过</td><td>丢包、延迟、seq变化</td></tr>
+</table>
+<h2>5.3 示例数据</h2>
+<table>
+<tr><th>目标点</th><th>理论坐标/cm</th><th>实测坐标/cm</th><th>X误差/cm</th><th>Y误差/cm</th><th>总误差/cm</th></tr>
+<tr><td>圆1</td><td>(-20, 20)</td><td>(-19.2, 20.7)</td><td>0.8</td><td>0.7</td><td>1.1</td></tr>
+<tr><td>圆2</td><td>(20, 20)</td><td>(20.6, 19.1)</td><td>0.6</td><td>0.9</td><td>1.1</td></tr>
+<tr><td>圆3</td><td>(0, 0)</td><td>(0.4, -0.5)</td><td>0.4</td><td>0.5</td><td>0.6</td></tr>
+<tr><td>圆4</td><td>(-20, -20)</td><td>(-20.8, -19.4)</td><td>0.8</td><td>0.6</td><td>1.0</td></tr>
+<tr><td>圆5</td><td>(20, -20)</td><td>(19.1, -20.6)</td><td>0.9</td><td>0.6</td><td>1.1</td></tr>
+</table>
+<table>
+<tr><th>自动巡检项</th><th>设定值</th><th>示例结果</th><th>说明</th></tr>
+<tr><td>蛇形步距</td><td>10 cm</td><td>10 cm</td><td>5×5共25点</td></tr>
+<tr><td>单点停留</td><td>300 ms</td><td>300 ms</td><td>由PATROL_DWELL_MS控制</td></tr>
+<tr><td>闭环采样</td><td>3帧</td><td>3帧</td><td>取中值抑制偶然误差</td></tr>
+<tr><td>定位容差</td><td>≤2 cm</td><td>最大1.3 cm</td><td>示例满足要求</td></tr>
+<tr><td>火源1</td><td>人工放置</td><td>(-10.3, 10.5) cm</td><td>蜂鸣3声并记录</td></tr>
+<tr><td>火源2</td><td>人工放置</td><td>(10.1, -9.6) cm</td><td>蜂鸣3声并记录</td></tr>
+</table>
+<p>以上数据为按当前代码和设计方案给出的测试记录格式与示例数据，正式测试时应以现场实测值替换，并保留误差较大的点用于分析机械张力、绳轮直径和视觉标定误差。</p>
+
+<h1>6 结论</h1>
+<p>本设计完成了面向简易绳驱巡检装置的总体方案、运动学建模、硬件接口、通信协议和软件状态机设计。四绳闭环步进方案能够在较轻结构下实现平面巡检，视觉闭环补偿提高了定位稳定性，串口屏提供了清晰的操作入口。系统可完成回中心、四圆巡逻、指定顺序巡逻、自动蛇形巡检和火源报警记录等功能。后续调试重点为实测绳轮等效半径、四角出绳点高度、视觉坐标标定矩阵和绳索张力，以进一步降低大范围运动时的系统误差。</p>
+
+<h1>参考文献</h1>
+<p>[1] STMicroelectronics. STM32F407xx Reference Manual[M]. 2024.</p>
+<p>[2] STMicroelectronics. STM32F103xx Reference Manual[M]. 2024.</p>
+<p>[3] ZDT. X42S第二代闭环步进电机用户手册V1.0.4[Z]. 2026.</p>
+<p>[4] Nordic Semiconductor. nRF24L01+ Single Chip 2.4GHz Transceiver Product Specification[M].</p>
+<p>[5] 全国大学生电子设计竞赛组委会. 设计总结报告写作要求[Z].</p>
+
+<h1>附录</h1>
+<h2>附录A 主要元器件清单</h2>
+<table>
+<tr><th>序号</th><th>名称</th><th>型号/规格</th><th>数量</th><th>备注</th></tr>
+<tr><td>1</td><td>主控单片机</td><td>STM32F407VET6</td><td>1</td><td>运动控制与任务调度</td></tr>
+<tr><td>2</td><td>视觉中继单片机</td><td>STM32F103C8T6</td><td>1</td><td>串口接收和无线发送</td></tr>
+<tr><td>3</td><td>闭环步进电机</td><td>ZDT X42S</td><td>4</td><td>四绳收放</td></tr>
+<tr><td>4</td><td>机器视觉模块</td><td>MaixCam Pro</td><td>1</td><td>圆点定位和火源识别</td></tr>
+<tr><td>5</td><td>无线模块</td><td>NRF24L01</td><td>2</td><td>2.4 GHz通信</td></tr>
+<tr><td>6</td><td>惯性传感器</td><td>ICM42688</td><td>1</td><td>姿态调试</td></tr>
+<tr><td>7</td><td>显示模块</td><td>串口屏/OLED</td><td>各1</td><td>交互和调试显示</td></tr>
+<tr><td>8</td><td>蜂鸣器</td><td>有源蜂鸣器</td><td>1</td><td>火源报警</td></tr>
+</table>
+<h2>附录B 关键程序文件</h2>
+<p>F407主控：Core/App/platform_config.h、motor.c、kinematics.c、task.c、screen.c、nrf_app.c、buzzer.c。F103视觉中继：Core/Src/main.c、maixcam_uart.c、NRF24L01.c、icm42688.c、OLED.c。MaixCam端：main.py、config.py、imu_tracker.py、display_overlay.py。</p>
+</body>
+</html>

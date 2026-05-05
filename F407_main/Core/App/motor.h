@@ -34,6 +34,13 @@ void Motor_DisableAll(void);
 void Motor_Stop(uint8_t id);
 void Motor_StopAll(void);
 
+/* ---- 状态读取 ---- */
+uint8_t Motor_ReadStatus(uint8_t id, uint8_t *status_flags);
+uint8_t Motor_IsReached(uint8_t id);
+uint8_t Motor_AllReached(void);
+uint8_t Motor_ReadPositionDeg(uint8_t id, float *angle_deg);
+uint8_t Motor_ReadAllPositions(float angle_deg[4]);
+
 /* ---- 位置归零 (标定) ---- */
 void Motor_ZeroPosition(uint8_t id);
 void Motor_ZeroAllPositions(void);

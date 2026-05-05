@@ -1,159 +1,563 @@
-# Core/App — 应用层模块说明
+# Core/App - F407 应用层详细说明
 
-> 所有不确定的硬件参数统一在 `platform_config.h` 中修改，不要直接改各模块源码中的数值。
+本文档对应当前 `C:\Xdiansai\F407_main` 代码版本，用于队内交接、现场调参和赛前核对。所有可调参数优先修改 `Core/App/platform_config.h`。
 
----
+## 1. 系统组成
 
-## 模块一览
+F407 负责四电机绳驱平台控制、串口屏交互、摄像头 NRF 数据接收、蜂鸣器提示和比赛任务状态机。
 
-| 文件 | 职责 | 对外接口 |
-|------|------|----------|
-| `platform_config.h` | 所有宏参数 | — |
-| `motor.h/.c` | ZDT X42S X 固件驱动 | `Motor_Init / Enable / Stop / MoveAbsolute / MultiPositionCmd` |
-| `kinematics.h/.c` | 绳长↔坐标换算 | `Kinematics_Init / LaserToCam / CamToAngles` |
-| `task.h/.c` | 任务状态机 | `Task_Init / Tick / StartHome / StartAreaPatrol ...` |
-| `screen.h/.c` | 串口屏通信 | `Screen_Init / SetCoord / RecordFire / RegisterCallback` |
-| `nrf_app.h/.c` | NRF 应用层 | `NrfApp_Init / Poll / IsFire / GetDxCm / GetDyCm` |
-| `buzzer.h/.c` | 蜂鸣器 | `Buzzer_Init / Beep / BeepAsync / Tick` |
-| `motor_test.h/.c` | 电机验证测试 | `MotorTest_Run` |
+| 模块 | 文件 | 作用 |
+| --- | --- | --- |
+| 参数配置 | `platform_config.h` | 电机 ID、几何尺寸、圆坐标、速度、巡逻策略、闭环参数 |
+| 电机驱动 | `motor.h/.c` | ZDT X42S X 固件串口指令封装 |
+| 运动学 | `kinematics.h/.c` | 激光目标坐标转换为平台中心坐标，再转换为四电机角度 |
+| 任务状态机 | `task.h/.c` | 回中、区域巡逻、顺序巡逻、自动巡逻、火源处理 |
+| 串口屏 | `screen.h/.c` | 接收屏幕按钮命令，刷新坐标和火源坐标 |
+| 摄像头 NRF | `nrf_app.h/.c` | 接收视觉坐标、火源坐标和火源标志 |
+| 蜂鸣器 | `buzzer.h/.c` | 非阻塞蜂鸣提示 |
+| 测试 | `motor_test.* / screen_test.*` | 单独验证电机和串口屏链路 |
 
----
+## 2. 硬件连接
 
-## platform_config.h — 关键参数
+| 外设 | F407 端口 | 说明 |
+| --- | --- | --- |
+| ZDT 电机总线 | USART1 `PA9/PA10` | 四台 ZDT X42S，地址 `1~4` |
+| 串口屏 | USART2 `PA2/PA3` | 屏 TX 接 F407 RX，屏 RX 接 F407 TX |
+| 调试串口 | USART3 `PB10/PB11` | 预留调试 |
+| NRF24L01 | SPI1 `PA5/PA6/PA7` | `PA8=CE`，`PC9=CSN`，`PC8=IRQ` |
+| 蜂鸣器 | `PB8` | 输出电平由 `BUZZER_ON_LEVEL` 控制 |
 
-| 宏 | 含义 | 默认值 | 说明 |
-|----|------|--------|------|
-| `ROPE_H_CM` | 滑轮到平台竖直距离 (cm) | `2.5` | 按实际高度差继续标定 |
-| `SPOOL_RADIUS_CM` | 绕线轮半径 (cm) | `1.75` | 实测直径 3.5cm |
-| `LASER_OFFSET_X_CM` | 激光点距平台中心 X 偏移 (cm) | `3.5` | 激光在中心时平台中心为 (-3.5, 0) |
-| `MOTOR_SPEED_RPM` | 运动速度 (RPM) | `10` | 调低可更稳 |
-| `MOTOR_ACCEL_RPMS` | 加速加速度 RPM/S | `10` | X 固件梯形曲线参数 |
-| `MOTOR_DECEL_RPMS` | 减速加速度 RPM/S | `10` | X 固件梯形曲线参数 |
-| `MOTOR_MOVE_TIMEOUT_MS` | 运动超时 (ms) | `30000` | 按实际调整 |
-| `MOTOR_ID_1~4` | 电机地址 | `1~4` | 需与电机拨码一致 |
+电机串口参数：
 
----
-
-## motor.h/.c — 电机驱动
-
-### 固件说明
-ZDT X42S 使用 **X 固件**。
-
-X 固件 FD 梯形曲线加减速位置命令格式 (16 字节):
+```text
+115200 8N1
+校验字节固定 0x6B
 ```
-Addr FD dir acc_h acc_l dec_h dec_l spd_h spd_l pos3 pos2 pos1 pos0 mode sync 6B
-```
-- `dir`: `0x00`=CW(收线/正转)，`0x01`=CCW(放线/反转)
-- `acc/dec`: 加/减速度，单位 RPM/S，2 字节大端
-- `speed`: 最大速度，单位 0.1RPM，2 字节大端
-- `pos`: 位置角度，单位 0.1°，4 字节大端
-- `mode`: `0x01`=绝对零点，`0x02`=相对当前位置
 
-### 主要接口
+串口屏参数：
+
+```text
+USART2, 115200
+屏幕 TX -> F407 PA3 / USART2_RX
+屏幕 RX -> F407 PA2 / USART2_TX
+GND 共地
+```
+
+## 3. 当前关键参数
+
+| 参数 | 当前值 | 作用和现场判断 |
+| --- | --- | --- |
+| `ROPE_H_CM` | `0.0f` | 当前按平面绳长模型测试。如果实物高度差明显且大范围偏差严重，再改成真实高度 |
+| `SPOOL_RADIUS_CM` | `1.75f` | 绕线轮半径，影响角度和绳长比例 |
+| `LASER_OFFSET_X_CM` | `0.0f` | 激光相对平台/摄像头中心 X 偏移 |
+| `LASER_OFFSET_Y_CM` | `3.5f` | 激光在平台中心 +Y 方向 3.5cm |
+| `KINEMATICS_SWAP_XY` | `0U` | 当前摄像头世界坐标和电机坐标已对齐，不交换 X/Y |
+| `KINEMATICS_CALIB_ENABLE` | `0U` | 二维开环补偿当前关闭，保留矩阵参数备用 |
+| `MOTOR_SPEED_RPM` | `40U` | 电机最高速度 |
+| `MOTOR_ACCEL_RPMS` | `40U` | 加速度，越大越跟手，但可能更抖 |
+| `MOTOR_DECEL_RPMS` | `40U` | 减速度，越大越少拖尾，但也更急 |
+| `BOOT_AUTO_ZERO_ENABLE` | `0U` | 比赛运行保持 `0`，避免上电覆盖中心零点 |
+| `MOTION_SEGMENT_STEP_CM` | `1.0f` | 每次大运动切成约 1cm 小段 |
+| `ANGLE_SEGMENT_MAX_DEG` | `10.0f` | 任务2角度表方案中，每小段最大电机角度变化 |
+| `AREA_TILT_COMP_DEG` | `0.0f` | 区域巡逻终点角度补偿量，当前关闭，避免破坏实测圆点角度 |
+| `AREA_EDGE_SLOW_RELEASE_ENABLE` | `1U` | 相邻圆边运动时启用长绳侧慢放线曲线 |
+| `AREA_EDGE_SLOW_RELEASE_POWER` | `2.0f` | 慢放线曲线指数，越大前半段放线越慢 |
+| `AREA_EDGE_FAST_TAKEUP_ENABLE` | `1U` | 指定边运动时启用起始圆对角电机收线加速 |
+| `AREA_EDGE_FAST_TAKEUP_POWER` | `2.0f` | 收线加速曲线指数，越大前半段收线越快 |
+| `AREA_SIDE_CURVE_ENABLE` | `1U` | 指定路径中启用两个侧边电机放线慢、收线快 |
+| `MOTION_SEGMENT_MIN_WAIT_MS` | `120U` | 每小段最少等待时间 |
+| `MOTION_SEGMENT_MARGIN_MS` | `80U` | 每小段估算时间余量 |
+| `PATROL_DWELL_MS` | `300U` | 区域/顺序巡逻每个点后的停留时间 |
+| `CLOSED_LOOP_ENABLE` | `1U` | 回中、自动蛇形等坐标运动到大路点后启用视觉闭环 |
+| `POSITION_TOL_CM` | `2.0f` | 闭环误差小于该值认为到位 |
+
+调参建议：
+
+| 现象 | 优先调整 |
+| --- | --- |
+| 坐标分段小段卡顿明显 | 增大 `MOTION_SEGMENT_STEP_CM` 到 `1.5~2.0`，或减小 `MOTION_SEGMENT_MARGIN_MS` |
+| 任务2角度表运动太碎 | 增大 `ANGLE_SEGMENT_MAX_DEG`，例如 `15.0f` |
+| 区域巡逻边缘内侧低、外侧高 | 保持 `AREA_TILT_COMP_DEG=0`，优先调 `AREA_EDGE_SLOW_RELEASE_POWER` |
+| 还没走到就进入下一段 | 增大 `MOTION_SEGMENT_MARGIN_MS`，或降低 `MOTOR_SPEED_RPM` |
+| 运动松绳 | 降低速度，增大分段密度，检查几何参数和电机方向 |
+| 到点偏差大 | 先确认圆编号和摄像头坐标，再考虑开启二维补偿或调整闭环参数 |
+| 运动太慢 | 增大 `MOTOR_SPEED_RPM`、`MOTOR_ACCEL_RPMS`，或把分段步长改大 |
+
+## 4. 新版圆编号
+
+当前 F407 和摄像头端都使用新版圆编号。摄像头端对应文件是：
+
+```text
+C:\Users\DELL\Desktop\bese1\config.py
+```
+
+编号表：
+
+| 新编号 | 坐标(cm) | 物理位置 | 来源 |
+| --- | --- | --- | --- |
+| 圆1 | `(-20, +20)` | 左上 | 旧圆4 |
+| 圆2 | `(+20, +20)` | 右上 | 旧圆3 |
+| 圆3 | `(0, 0)` | 中心 | 旧圆5 |
+| 圆4 | `(-20, -20)` | 左下 | 旧圆1 |
+| 圆5 | `(+20, -20)` | 右下 | 旧圆2 |
+
+F407 中的宏：
+
 ```c
-// 初始化
-Motor_Init(&huart1);
-
-// 使能 / 停止 / 松轴
-Motor_EnableAll();
-Motor_StopAll();
-Motor_DisableAll();
-
-
-// 标定: 激光点在中心圆时调用, 将所有电机当前位置角度清零
-Motor_ZeroAllPositions();
-
-// 绝对位置运动 (以标定点为零)
-// angle_deg > 0 → CW 收线, < 0 → CCW 放线
-Motor_MoveAbsolute(MOTOR_ID_1, 360.0f, 300.0f, 500, 500, 0);
-
-// 四电机多机原子命令
-Motor_MultiPositionCmd(angles, 300.0f, 500, 500);
+CIRCLE1 = 左上
+CIRCLE2 = 右上
+CIRCLE3 = 中心
+CIRCLE4 = 左下
+CIRCLE5 = 右下
 ```
 
----
+回中任务使用圆3中心。顺序巡逻输入的数字也按新版编号解释。
 
-## kinematics.h/.c — 运动学
+## 5. 运动学逻辑
 
-将激光目标坐标转换为四电机所需的绝对旋转角度。
+F407 接收或生成的是“激光点目标坐标”。实际控制时先反推出平台/摄像头中心坐标：
 
-```
-激光目标 (lx, ly)
-      ↓ LaserToCam: 按现场轴向修正, 转为平台中心坐标
-      ↓ CamToAngles: 平台四角挂点绳长差分 → 角度
-angles[4] → Motor_MultiPositionCmd
+```text
+platform_center_x = laser_x - LASER_OFFSET_X_CM
+platform_center_y = laser_y - LASER_OFFSET_Y_CM
 ```
 
-绳长公式 (H≈0 时退化为 2D):
-```
-platform_center = (laser_x - LASER_OFFSET_X_CM, laser_y)
+然后根据平台四角挂点和电机投影点计算绳长：
+
+```text
 corner_i = platform_center + platform_corner_offset_i
-L_i = sqrt( (corner_i_x - motor_i_x)^2 + (corner_i_y - motor_i_y)^2 + H^2 )
-angle_i (°) = (L_i_at_zero - L_i_at_target) / (2π×R) × 360
+L_i = sqrt((corner_i_x - motor_i_x)^2
+         + (corner_i_y - motor_i_y)^2
+         + ROPE_H_CM^2)
+angle_i = (L_zero_i - L_i) / (2πR) * 360
 ```
 
-**必须先标定 (Motor_ZeroAllPositions) 再调用 Kinematics_Init()。**
+符号约定：
 
----
+```text
+angle > 0 代表收线
+angle < 0 代表放线
+```
 
-## task.h/.c — 任务状态机
+`KINEMATICS_CALIB_ENABLE=0` 时不做二维开环补偿。若恢复补偿，代码会在 `LaserToCam()` 中先对激光目标坐标乘补偿矩阵，再进入激光偏移计算。
 
-| 状态 | 触发函数 | 描述 |
-|------|---------|------|
-| `TASK_IDLE` | — | 空闲 |
-| `TASK_HOME` | `Task_StartHome()` | 激光回中心圆 |
-| `TASK_AREA_PATROL` | `Task_StartAreaPatrol()` | 四角圆依次巡逻 |
-| `TASK_SEQ_PATROL` | `Task_StartSeqPatrol(seq)` | 用户指定 5 圆顺序 |
-| `TASK_AUTO_PATROL` | `Task_StartAutoPatrol()` | 蛇形 + 火源检测 |
-| `TASK_CALIBRATE` | `Task_StartCalibrate()` | 清零电机 + 更新运动学 |
-| `TASK_E_STOP` | `Task_EStop()` | 立即停止 |
+## 6. 分段运动策略
 
-主循环调用 `Task_Tick()` 驱动状态机。
+当前有两套分段策略。
 
----
+### 6.1 坐标分段
 
-## nrf_app.h/.c — NRF 应用层
+回中后的闭环补偿、自动蛇形和其他坐标目标使用坐标分段：
 
-接收 F103 (平台摄像头) 发来的 8 字节数据包:
+```text
+大目标
+  -> 按约 1cm 切段
+  -> 每段计算四电机目标角度
+  -> 根据每个电机角度差计算同步速度
+  -> 下发 ZDT 多机位置命令
+  -> 按估算时间进入下一段
+```
+
+关键点：
+
+- 不依赖 ZDT 到位返回。
+- 不使用固定 `15s` 或蛇形 `2s` 超时。
+- `wait_done()` 只判断当前小段估算时间是否到了。
+- 每个小段仍然是 ZDT 位置模式，因此会有轻微减速停顿。
+- 如果某次读取电机角度失败，会继续使用上一次内部估计角度，避免突然等待 `MOVE_UNKNOWN_WAIT_MS`。
+
+回中例外：
+
+- 回中时起点可能是手拉随机位置，坐标起点不可靠。
+- 因此回中直接让四个电机回 `0` 度，不按坐标切 1cm 小段。
+
+### 6.2 任务2角度表分段
+
+区域巡逻和顺序巡逻当前使用实测角点角度表，不再通过坐标运动学计算角度。角度表在 `task.c` 中：
+
+```c
+圆1: [-221.4,  938.5, -196.3, -931.2]
+圆2: [-864.9,  274.5,  932.6,  217.9]
+圆3: [   0.0,    0.0,    0.0,    0.0]
+圆4: [ 951.4,  398.7, -916.7,  319.6]
+圆5: [-296.5, -906.1, -350.0,  923.0]
+```
+
+这 4 列就是实际 ZDT 地址顺序：
+
+```text
+col0 = ID1
+col1 = ID2
+col2 = ID3
+col3 = ID4
+```
+
+当前实物位置关系：
+
+```text
+ID1 -> 圆4位置/左下
+ID2 -> 圆5位置/右下
+ID3 -> 圆2位置/右上
+ID4 -> 圆1位置/左上
+```
+
+当前角度表按 ID1~ID4 填写，不换列。`platform_config.h` 中 2号和4号电机方向取反：
+
+```c
+MOTOR1_DIR_SIGN =  1.0f
+MOTOR2_DIR_SIGN = -1.0f
+MOTOR3_DIR_SIGN =  1.0f
+MOTOR4_DIR_SIGN = -1.0f
+```
+
+从一个圆到另一个圆时，代码按电机角度插值：
+
+```text
+target_i = start_i + (end_i - start_i) * t
+```
+
+分段数由最大角度差决定：
+
+```text
+N = ceil(max(|end_i - start_i|) / ANGLE_SEGMENT_MAX_DEG)
+```
+
+因此每个小段中任意一个电机最大只变化约 `ANGLE_SEGMENT_MAX_DEG`。这套逻辑只用于任务2固定圆点巡逻；自动蛇形仍使用坐标网格。
+
+区域巡逻保留姿态补偿表 `k_area_tilt_comp`，但当前 `AREA_TILT_COMP_DEG=0`，所以终点角度不被改变，仍严格使用实测圆点角度。
+
+当前主要使用“相邻边长绳侧慢放线”策略。代码只在以下相邻边和反向边启用：
+
+```text
+圆1 <-> 圆2
+圆2 <-> 圆5
+圆5 <-> 圆4
+圆4 <-> 圆1
+```
+
+对角线运动、中心圆运动、起点到圆1都不启用慢放线。长绳侧定义：
+
+```text
+上边 圆1<->圆2: ID1/ID2
+右边 圆2<->圆5: ID1/ID4
+下边 圆5<->圆4: ID3/ID4
+左边 圆4<->圆1: ID2/ID3
+```
+
+只有这些长绳侧电机在该段确实处于放线方向时，才使用 `t^AREA_EDGE_SLOW_RELEASE_POWER` 的进度曲线。终点仍然等于原始角度表，不会改变圆点标定。
+
+另外，指定方向上会检查“起始圆点的对角电机”。如果这个电机在该段处于收线方向，会使用 `1-(1-t)^AREA_EDGE_FAST_TAKEUP_POWER` 的加速曲线，也就是前半段收线更快，后半段追上，终点仍然不变。该逻辑只在以下四个方向启用：
+
+```text
+圆1 -> 圆2: 起始圆1对角 ID2 收线加速
+圆1 -> 圆4: 起始圆1对角 ID2 收线加速
+圆2 -> 圆5: 起始圆2对角 ID1 收线加速
+圆2 -> 圆1: 起始圆2对角 ID1 收线加速
+圆5 -> 圆4: 起始圆5对角 ID4 收线加速
+圆5 -> 圆2: 起始圆5对角 ID4 收线加速
+圆4 -> 圆1: 起始圆4对角 ID3 收线加速
+圆4 -> 圆5: 起始圆4对角 ID3 收线加速
+```
+
+还有一类“侧边电机曲线”，只在圆3中心和四个角点之间启用。侧边电机如果放线，则前半段放线更慢；如果收线，则前半段收线更快。终点仍然等于原始角度表。
+
+启用路径：
+
+```text
+圆3中心 <-> 圆1
+圆3中心 <-> 圆2
+圆3中心 <-> 圆4
+圆3中心 <-> 圆5
+```
+
+侧边电机定义：
+
+```text
+圆3 <-> 圆1: ID1/ID3
+圆3 <-> 圆2: ID2/ID4
+圆3 <-> 圆4: ID2/ID4
+圆3 <-> 圆5: ID1/ID3
+```
+
+以下对角过程不会直接斜向运动，而是自动拆成“起点圆 -> 圆3中心 -> 目标圆”两个过程；两个半段都套用上面的侧边电机曲线：
+
+```text
+圆1 -> 圆5
+圆5 -> 圆1
+圆2 -> 圆4
+圆4 -> 圆2
+```
+
+## 7. 任务状态机
+
+### 回中
+
+触发：
+
+```text
+串口屏 0xA1
+```
+
+行为：
+
+```text
+四电机回 0 度
+激光回新版圆3中心
+之后进入视觉闭环确认
+```
+
+### 区域巡逻
+
+触发：
+
+```text
+串口屏 0xA2
+```
+
+路线：
+
+```text
+圆1 -> 圆2 -> 圆5 -> 圆4 -> 圆1
+```
+
+区域巡逻使用实测角点角度表，并叠加区域巡逻姿态补偿表。该路线走四个边角点，不经过中心圆3。到每个点后停留 `PATROL_DWELL_MS`，不再执行坐标视觉闭环修正。
+
+### 顺序巡逻
+
+触发：
+
+```text
+串口屏 0xA3 + 5 个 ASCII 数字 + 0xFE
+```
+
+例子：
+
+```text
+55 55 A3 31 32 35 34 31 FE
+```
+
+表示：
+
+```text
+圆1 -> 圆2 -> 圆5 -> 圆4 -> 圆1
+```
+
+如果屏幕只发 `55 55 A3 FE`，代码默认使用 `1,2,5,4,1`。
+
+顺序巡逻同样使用实测角点角度表。输入数字按新版圆编号解释，到每个点后停留 `PATROL_DWELL_MS`，不再执行坐标视觉闭环修正。
+
+### 自动巡逻
+
+触发：
+
+```text
+串口屏 0xA4
+```
+
+路线为坐标蛇形网格，不依赖圆编号：
+
+```text
+x = -20, -10, 0, 10, 20
+y = -20, -10, 0, 10, 20
+```
+
+火源处理：
+
+- 摄像头全局检测火源。
+- 只有自动巡逻中检测到火源时，F407 会暂停运动、蜂鸣、记录火源坐标。
+- 蜂鸣结束后继续前往当前路点，不跳过该点。
+- 火源坐标最多记录 2 个，并发送到串口屏火源页控件。
+
+### 电机使能和失能
+
+`0xA5`：
+
+```text
+电机使能/抱轴
+不清零
+不移动
+蜂鸣 1 声
+```
+
+`0xA6`：
+
+```text
+停止电机
+延时等待总线稳定
+发送两轮失能命令
+松轴
+蜂鸣 2 声
+```
+
+失能路径加了保险，避免广播停止后第一个电机漏收失能帧。
+
+## 8. 串口屏协议
+
+屏幕发给 F407：
+
+```text
+0x55 0x55 CMD
+```
+
+在串口屏工程中写法：
+
+```text
+prints "UU",0
+prints 0xA1,1
+```
+
+命令表：
+
+| 命令 | 功能 |
+| --- | --- |
+| `0xA0` | 返回/急停 |
+| `0xA1` | 启动/回中 |
+| `0xA2` | 区域巡逻 |
+| `0xA3` | 顺序巡逻 |
+| `0xA4` | 自动巡逻 |
+| `0xA5` | 电机使能/抱轴 |
+| `0xA6` | 电机失能/松轴 |
+| `0xB0~0xB5` | 页面编号上报 |
+
+F407 发给屏幕：
+
+```text
+tX.txt="12.34" FF FF FF
+tY.txt="-5.67" FF FF FF
+```
+
+控件命名要求：
+
+| 控件 | 用途 |
+| --- | --- |
+| `tX` | 实时 X 坐标 |
+| `tY` | 实时 Y 坐标 |
+| `tF1X/tF1Y` | 第 1 个火源坐标 |
+| `tF2X/tF2Y` | 第 2 个火源坐标 |
+
+坐标刷新优先级：
+
+```text
+摄像头有效坐标
+  -> 摄像头帧有效但坐标无效时显示 LOST
+  -> 尚未收到摄像头帧时显示 F407 当前目标激光坐标
+```
+
+## 9. NRF 摄像头数据协议
+
+F407 接收 20 字节包：
 
 ```c
 typedef struct {
-    uint8_t  flags;       // bit0=火源检测, bit1=位置有效
-    uint8_t  seq;         // 序列号
-    int16_t  dx_0p1mm;   // 摄像头偏离指令中心 X (0.1mm)
-    int16_t  dy_0p1mm;   // Y (0.1mm)
-    int8_t   fire_x_cm;  // 火源 X 坐标 (cm, 相对当前激光位置的偏差)
-    int8_t   fire_y_cm;  // 火源 Y 坐标 (cm)
+    uint8_t  head;          // 0xA5
+    uint8_t  flags;         // bit0=火源, bit1=坐标有效, bit2=估计坐标
+    uint8_t  seq;
+    int16_t  platform_x_mm; // 实际承载 laser_x_mm
+    int16_t  platform_y_mm; // 实际承载 laser_y_mm
+    int16_t  fire_x_mm[2];
+    int16_t  fire_y_mm[2];
+    uint8_t  fire_count;
+    uint8_t  fire_score[2];
+    uint8_t  checksum;      // byte0..17 XOR
+    uint8_t  tail;          // 0x5A
 } NRF_CamData_t;
 ```
 
-F103 端对接要点:
-- 使用相同地址 `{0x34,0x43,0x10,0x10,0x01}`
-- 载荷长度 8 字节
-- 发现火源时置 `flags |= 0x01`, 填写 `fire_x_cm / fire_y_cm`
+标志位：
 
----
+| bit | 宏 | 含义 |
+| --- | --- | --- |
+| bit0 | `NRF_FLAG_FIRE` | 当前检测到火源 |
+| bit1 | `NRF_FLAG_POS_VALID` | 坐标有效 |
+| bit2 | `NRF_FLAG_POS_EST` | 坐标是估计值 |
+| bit3 | `NRF_FLAG_FIRE1_VALID` | 火源 1 坐标有效 |
+| bit4 | `NRF_FLAG_FIRE2_VALID` | 火源 2 坐标有效 |
 
-## buzzer.h/.c — 蜂鸣器
+注意：`platform_x_mm/platform_y_mm` 是历史字段名，当前实际传的是激光点世界坐标，单位 mm。F407 内部显示和任务使用 cm。
+
+## 10. 零点和上电流程
+
+比赛运行推荐：
 
 ```c
-Buzzer_Beep(3);          // 阻塞响 3 声
-Buzzer_BeepAsync(3);     // 非阻塞, 需在主循环调用 Buzzer_Tick()
+#define BOOT_AUTO_ZERO_ENABLE 0U
 ```
 
-> ⚠️ 需要在 CubeMX IOC 中为 PB8 (或修改 `BUZZER_GPIO_PIN`) 新增 GPIO Output。
+这样 F407 复位或重新烧录时不会把当前位置重新记成 0 度。
 
----
+重新建立中心零点流程：
 
-## motor_test.h/.c — 电机测试
+1. 手动把激光点放到新版圆3中心。
+2. 把 `BOOT_AUTO_ZERO_ENABLE` 临时改成 `1U`。
+3. 烧录并上电。
+4. F407 执行 `Motor_ZeroAllPositions()`，把当前电机位置记为 0 度。
+5. 再把 `BOOT_AUTO_ZERO_ENABLE` 改回 `0U`，重新烧录。
+6. 后续比赛中可以手动拉开平台，再按串口屏使能和回中。
 
-验证 F407 → USART1 → 电机通路是否正常。
+禁止事项：
 
-**开启方法**: 在 `main.c` 的 `USER CODE BEGIN PD` 处取消注释:
+- 平台已经被拉到随机位置后，不要执行清零。
+- 电机驱动器断电或机械基准变化后，需要重新建立中心零点。
+
+## 11. 赛前检查
+
+1. `BOOT_AUTO_ZERO_ENABLE` 是否为 `0U`。
+2. `KINEMATICS_CALIB_ENABLE` 是否符合当前测试需要，当前为 `0U`。
+3. 摄像头端 `config.py` 的圆编号是否和本文一致。
+4. 串口屏按钮 `0xA5` 是否是使能，不是标定。
+5. 四个 ZDT 地址是否为 `1,2,3,4`。
+6. 四个 ZDT 波特率和校验是否为 `115200 / 0x6B`。
+7. 串口屏页面是否都有 `tX/tY`。
+8. 火源页是否有 `tF1X/tF1Y/tF2X/tF2Y`。
+9. `MOTOR_TEST_ENABLE` 和 `SCREEN_TEST_ENABLE` 是否都保持注释。
+
+## 12. 常见问题
+
+### 分段运动中突然等很久
+
+旧问题通常来自读取电机角度失败后进入保守等待。当前代码已改为读取失败时保留上一段内部角度估计。如果仍然偶发长停，检查是否进入视觉闭环等待或 NRF 坐标长时间无效。
+
+### 分段运动有轻微顿挫
+
+正常。每小段都是 ZDT 位置模式，电机会加速、减速、再接下一段。想更顺可尝试：
+
 ```c
-#define MOTOR_TEST_ENABLE
+MOTION_SEGMENT_STEP_CM = 1.5f 或 2.0f
+MOTION_SEGMENT_MARGIN_MS = 20U~50U
+MOTOR_ACCEL_RPMS / MOTOR_DECEL_RPMS 适当增大
 ```
 
-**测试内容**: 电机 1 以 200 RPM 正转 1 圈，反转 1 圈，重复 3 次。
+### 按失能后某个电机不松轴
 
-**验证完成后务必重新注释掉**，否则系统不会进入正常任务循环。
+代码失能时会先广播停止，再发两轮单机失能。若仍不松，优先查对应 ZDT 的地址、波特率、校验、报警状态和接线。
+
+### 按使能后某个电机不抱轴
+
+`Motor_EnableAll()` 会先 `1->4` 发一轮，再 `4->1` 补发一轮。若某个电机仍不抱轴，优先查该电机 ID 和驱动器参数。
+
+### 串口屏显示 LOST
+
+说明 F407 已收到摄像头帧，但该帧 `NRF_FLAG_POS_VALID` 未置位。检查摄像头是否识别到圆、是否有世界坐标、NRF 数据包 flags 是否正确。
+
+### 顺序巡逻跑错圆
+
+确认输入数字是新版圆编号：
+
+```text
+1=左上, 2=右上, 3=中心, 4=左下, 5=右下
+```
+
+### 回中不是回中心
+
+确认中心零点是否是在新版圆3中心建立的，且 `BOOT_AUTO_ZERO_ENABLE` 没有在随机位置被打开。
+
+## 13. 测试模式
+
+在 `Core/Src/main.c` 的 `USER CODE BEGIN PD` 处取消注释：
+
+```c
+//#define MOTOR_TEST_ENABLE
+//#define SCREEN_TEST_ENABLE
+```
+
+正常比赛运行时两项都必须保持注释，否则主循环不会进入正式任务。

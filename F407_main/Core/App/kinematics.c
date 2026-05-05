@@ -57,7 +57,8 @@ void Kinematics_Init(void)
     float cam_x, cam_y;
 
     k_spool_circ_cm = 2.0f * (float)M_PI * SPOOL_RADIUS_CM;
-    /* 上电时激光在(0,0), 平台中心实际在(-LASER_OFFSET_X_CM, 0),
+    /* 上电时激光在(0,0), 平台中心实际在
+     * (-LASER_OFFSET_X_CM, -LASER_OFFSET_Y_CM),
      * 基准绳长必须用平台中心实际起始坐标计算。 */
     Kinematics_LaserToCam(0.0f, 0.0f, &cam_x, &cam_y);
     for (uint8_t i = 0; i < 4; i++) {
@@ -78,12 +79,12 @@ void Kinematics_LaserToCam(float laser_x, float laser_y,
 
 #if KINEMATICS_SWAP_XY
     /* 现场安装坐标修正: 代码目标坐标 (x,y) 映射到运动学坐标 (y,x)。
-     * 激光相对平台中心的物理 X 偏移, 在交换后的运动学坐标里落到 Y 轴。 */
-    *cam_x = target_y;
-    *cam_y = target_x - LASER_OFFSET_X_CM;
+     * 交换后再按运动学坐标系补偿激光相对平台中心的偏移。 */
+    *cam_x = target_y - LASER_OFFSET_X_CM;
+    *cam_y = target_x - LASER_OFFSET_Y_CM;
 #else
     *cam_x = target_x - LASER_OFFSET_X_CM;
-    *cam_y = target_y;
+    *cam_y = target_y - LASER_OFFSET_Y_CM;
 #endif
 }
 

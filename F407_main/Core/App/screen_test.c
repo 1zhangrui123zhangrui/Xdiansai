@@ -48,7 +48,7 @@ static void dbg_hex(const uint8_t *buf, uint16_t len)
 static uint8_t find_cmd_code(const uint8_t *buf, uint16_t len)
 {
     for (uint16_t i = 0; i < len; i++) {
-        if (buf[i] >= 0xA0U && buf[i] <= 0xA5U) {
+        if (buf[i] >= 0xA0U && buf[i] <= 0xA6U) {
             return buf[i];
         }
     }

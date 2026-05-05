@@ -33,8 +33,10 @@ void Kinematics_CamToAngles(float cam_x, float cam_y,
 
 /**
  * @brief  将激光目标坐标转换为平台中心目标坐标
- *         默认: cam_x = laser_x - LASER_OFFSET_X_CM, cam_y = laser_y
- *         即激光点在中心圆 (0,0) 时, 平台中心在 (-3.5, 0)。
+ *         默认: cam_x = laser_x - LASER_OFFSET_X_CM,
+ *              cam_y = laser_y - LASER_OFFSET_Y_CM。
+ *         当前实物: 激光点在平台中心 +Y 方向 3.5cm,
+ *         即激光点在中心圆 (0,0) 时, 平台中心在 (0,-3.5)。
  *         若 KINEMATICS_SWAP_XY=1, 则先交换现场 X/Y 轴再补偿激光偏移
  */
 void Kinematics_LaserToCam(float laser_x, float laser_y,

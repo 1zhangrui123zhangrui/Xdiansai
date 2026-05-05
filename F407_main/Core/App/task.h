@@ -8,6 +8,8 @@
  *  SEQ_PATROL  - 顺序巡逻 (用户指定 5 个圆顺序)
  *  AUTO_PATROL - 自动巡逻 (蛇形, 兼顾火源检测)
  *  CALIBRATE   - 标定 (清零电机角度)
+ *  MOTOR_ENABLE  - 电机使能/抱轴
+ *  MOTOR_DISABLE - 停止并失能/松轴
  *  E_STOP      - 急停
  */
 #ifndef __TASK_H
@@ -40,6 +42,8 @@ void Task_StartAreaPatrol(void);
 void Task_StartSeqPatrol(const uint8_t seq[5]);
 void Task_StartAutoPatrol(void);
 void Task_StartCalibrate(void);
+void Task_EnableMotors(void);
+void Task_DisableMotors(void);
 void Task_EStop(void);
 
 /** 当前任务状态 */

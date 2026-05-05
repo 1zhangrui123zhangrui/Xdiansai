@@ -66,7 +66,8 @@ static void on_home(void)         { Task_EStop(); }
 static void on_start(void)        { Task_StartHome(); }
 static void on_area(void)         { Task_StartAreaPatrol(); }
 static void on_auto(void)         { Task_StartAutoPatrol(); }
-static void on_calibrate(void)    { Task_StartCalibrate(); }
+static void on_motor_enable(void) { Task_EnableMotors(); }
+static void on_motor_disable(void){ Task_DisableMotors(); }
 static void on_seq(uint8_t *s)    { Task_StartSeqPatrol(s); }
 /* USER CODE END PFP */
 
@@ -116,19 +117,21 @@ int main(void)
   Screen_RegisterCallback(CMD_START,        on_start);
   Screen_RegisterCallback(CMD_AREA_PATROL,  on_area);
   Screen_RegisterCallback(CMD_AUTO_PATROL,  on_auto);
-  Screen_RegisterCallback(CMD_CALIBRATE,    on_calibrate);
+  Screen_RegisterCallback(CMD_MOTOR_ENABLE, on_motor_enable);
+  Screen_RegisterCallback(CMD_MOTOR_DISABLE,on_motor_disable);
   Screen_RegisterSequenceCallback(on_seq);
 
   /* --- 电机 --- */
   Motor_Init(MOTOR_UART);
 
+#if BOOT_AUTO_ZERO_ENABLE
   /* --- 上电中心清零 ---
-   * 上电前必须手动把激光点放在中心圆。
-   * 此处只把当前位置记为 0 度。
-   * 不要在模块被拉开后再次清零, 否则 0 度就不再对应中心圆。
-  */
+   * 只在建立中心零点时打开: 上电前必须手动把激光点放在中心圆。
+   * 比赛/日常运行应保持 BOOT_AUTO_ZERO_ENABLE=0, 避免随机拉开后覆盖零点。
+   */
   Motor_ZeroAllPositions();
   HAL_Delay(200);
+#endif
 
   /* --- 运动学初始化 (零点已设置) --- */
   Kinematics_Init();
@@ -171,6 +174,8 @@ int main(void)
         last_coord_ms = HAL_GetTick();
         if (NrfApp_HasValidPosition()) {
             Screen_SetCoord(NrfApp_GetPlatformXCm(), NrfApp_GetPlatformYCm());
+        } else if (NrfApp_HasReceivedFrame()) {
+            Screen_SetCoordLost();
         } else {
             Screen_SetCoord(Task_GetLaserX(), Task_GetLaserY());
         }

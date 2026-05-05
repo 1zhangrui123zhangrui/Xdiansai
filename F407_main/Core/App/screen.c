@@ -132,6 +132,12 @@ void Screen_SetCoord(float x, float y)
     raw_send(buf);
 }
 
+void Screen_SetCoordLost(void)
+{
+    raw_send("tX.txt=\"LOST\"");
+    raw_send("tY.txt=\"LOST\"");
+}
+
 void Screen_RecordFire(float x, float y)
 {
     if (s_fire_cnt >= 2) return;
@@ -178,8 +184,9 @@ void Screen_OnByteReceived(uint8_t byte)
             if (s_seq_cb) {
                 uint8_t seq[5];
                 if (s_seq_idx == 0) {
-                    /* 屏幕未发送序列数据 → 使用默认顺序 1-2-3-4-5 */
-                    for (uint8_t i = 0; i < 5; i++) seq[i] = i + 1U;
+                    /* 屏幕未发送序列数据 -> 使用默认边角巡逻 1-2-5-4-1 */
+                    const uint8_t default_seq[5] = {1U, 2U, 5U, 4U, 1U};
+                    memcpy(seq, default_seq, sizeof(seq));
                     s_seq_cb(seq);
                 } else if (s_seq_idx == 5) {
                     uint8_t valid = 1;

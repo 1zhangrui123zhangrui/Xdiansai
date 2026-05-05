@@ -54,6 +54,7 @@ uint8_t NrfApp_Poll(void);
 
 /** 获取最新一帧摄像头数据 */
 const NRF_CamData_t *NrfApp_GetData(void);
+uint8_t NrfApp_HasReceivedFrame(void);
 
 /** 判断最近一帧是否包含火源标志 */
 uint8_t NrfApp_IsFire(void);
