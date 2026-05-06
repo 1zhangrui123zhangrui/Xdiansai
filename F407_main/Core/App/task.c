@@ -60,11 +60,11 @@ static const float k_area_tilt_comp[5][4] = {
 
 /* 任务2实测角点角度表: 每行对应圆1~圆5, 列为 ZDT ID1~ID4 绝对角度(°) */
 static const float k_circle_angles[5][4] = {
-    { -375.4f,  936.5f, -268.5f, -961.2f },  /* 圆1 */
-    { -928.0f,  253.5f,  919.6f,  219.9f },  /* 圆2 */
+    { -236.8f,  961.5f, -189.5f, -951.2f },  /* 圆1 */
+    { -934.0f,  362.2f,  924.6f,  227.9f },  /* 圆2 */
     {    0.0f,    0.0f,    0.0f,    0.0f },  /* 圆3: 中心 */
-    {  954.4f,  386.7f, -930.7f,  353.6f },  /* 圆4 */
-    { -315.5f, -929.1f, -237.7f,  897.4f },  /* 圆5 */
+    {  869.4f,  364.7f, -936.0f,  250.5f },  /* 圆4 */
+    { -400.5f, -830.0f, -365.8f,  875.0f },  /* 圆5 */
 };
 
 typedef struct {
@@ -76,28 +76,28 @@ typedef struct {
 
 /* 自动巡逻实测边界端点: 5 条横向扫描线, 行内用角度插值运动 */
 static const AutoPatrolPoint_t k_auto_patrol_points[] = {
-    {-20.0f,  20.0f, {-375.4f,  936.5f, -268.5f, -961.2f}, 0},   /* 圆1 */
-    { 20.0f,  20.0f, {-928.0f,  253.5f,  919.6f,  219.9f}, 1},   /* 圆2 */
-    { 20.0f,  10.0f, {-647.1f, -129.0f,  706.7f,  322.8f}, -1},
-    {-20.0f,  10.0f, {  31.0f,  674.0f, -380.6f, -587.4f}, -1},
-    {-20.0f,   0.0f, { 313.2f,  509.0f, -515.9f, -274.7f}, -1},
-    { 20.0f,   0.0f, {-481.7f, -445.7f,  394.3f,  469.9f}, -1},
+    {-20.0f,  20.0f, {-236.8f,  961.5f, -189.5f, -951.2f}, 0},   /* 圆1 */
+    { 20.0f,  20.0f, {-934.0f,  362.2f,  924.6f,  227.9f}, 1},   /* 圆2 */
+    { 20.0f,  10.0f, {-712.1f,   -0.7f,  578.7f,  356.8f}, -1},
+    {-20.0f,  10.0f, {  83.6f,  743.0f, -325.6f, -651.4f}, -1},
+    {-20.0f,   0.0f, { 357.2f,  543.0f, -499.9f, -380.0f}, -1},
+    { 20.0f,   0.0f, {-559.7f, -331.7f,  292.3f,  530.9f}, -1},
     { 20.0f, -10.0f, {
-        -338.4f - AUTO_STRESS_RELIEF_DEG * MOTOR1_DIR_SIGN,
-        -743.3f - AUTO_STRESS_RELIEF_DEG * MOTOR2_DIR_SIGN,
-          68.0f - AUTO_STRESS_RELIEF_DEG * MOTOR3_DIR_SIGN,
-         683.6f - AUTO_STRESS_RELIEF_DEG * MOTOR4_DIR_SIGN}, -1},
+        -463.4f - AUTO_STRESS_RELIEF_DEG * MOTOR1_DIR_SIGN,
+        -703.3f - AUTO_STRESS_RELIEF_DEG * MOTOR2_DIR_SIGN,
+         -35.5f - AUTO_STRESS_RELIEF_DEG * MOTOR3_DIR_SIGN,
+         706.6f - AUTO_STRESS_RELIEF_DEG * MOTOR4_DIR_SIGN}, -1},
     {-20.0f, -10.0f, {
-         703.3f - AUTO_STRESS_RELIEF_DEG * MOTOR1_DIR_SIGN,
+         660.7f - AUTO_STRESS_RELIEF_DEG * MOTOR1_DIR_SIGN,
          421.9f - AUTO_STRESS_RELIEF_DEG * MOTOR2_DIR_SIGN,
-        -740.1f - AUTO_STRESS_RELIEF_DEG * MOTOR3_DIR_SIGN,
-          69.6f - AUTO_STRESS_RELIEF_DEG * MOTOR4_DIR_SIGN}, -1},
+        -699.0f - AUTO_STRESS_RELIEF_DEG * MOTOR3_DIR_SIGN,
+         -17.8f - AUTO_STRESS_RELIEF_DEG * MOTOR4_DIR_SIGN}, -1},
     {-20.0f, -20.0f, {
-         954.4f - AUTO_STRESS_RELIEF_DEG * MOTOR1_DIR_SIGN,
-         386.7f - AUTO_STRESS_RELIEF_DEG * MOTOR2_DIR_SIGN,
-        -930.7f - AUTO_STRESS_RELIEF_DEG * MOTOR3_DIR_SIGN,
-         353.6f - AUTO_STRESS_RELIEF_DEG * MOTOR4_DIR_SIGN}, 3},   /* 圆4 */
-    { 20.0f, -20.0f, {-315.5f, -929.1f, -237.7f,  897.4f}, 4},   /* 圆5 */
+         869.4f - AUTO_STRESS_RELIEF_DEG * MOTOR1_DIR_SIGN,
+         364.7f - AUTO_STRESS_RELIEF_DEG * MOTOR2_DIR_SIGN,
+        -936.0f - AUTO_STRESS_RELIEF_DEG * MOTOR3_DIR_SIGN,
+         250.5f - AUTO_STRESS_RELIEF_DEG * MOTOR4_DIR_SIGN}, 3},   /* 圆4 */
+    { 20.0f, -20.0f, {-400.5f, -830.0f, -365.8f,  875.0f}, 4},   /* 圆5 */
 };
 
 #define AUTO_PATROL_POINT_COUNT ((uint8_t)(sizeof(k_auto_patrol_points) / sizeof(k_auto_patrol_points[0])))
@@ -450,8 +450,9 @@ static void setup_auto_risk_curves(uint8_t point_idx)
         mark_slow_takeup_if_needed(3U);
     }
 
-    /* (20,10)->(-20,10): ID4 收线快一点, ID2/ID3 放线稍慢一点 */
+    /* (20,10)->(-20,10): ID1/ID4 收线快一点, ID2/ID3 放线稍慢一点 */
     if (prev == 2U && point_idx == 3U) {
+        mark_light_fast_takeup_if_needed(0U);
         mark_fast_takeup_if_needed(3U);
         mark_light_slow_release_if_needed(1U);
         mark_light_slow_release_if_needed(2U);
@@ -939,6 +940,8 @@ static void move_to_auto_point(uint8_t point_idx)
         if (from_ci >= 0 && p->circle_idx >= 0) {
             setup_edge_slow_release(from_ci, (uint8_t)p->circle_idx);
         }
+    } else if (p->circle_idx >= 0) {
+        setup_edge_slow_release(2, (uint8_t)p->circle_idx);
     }
     setup_auto_risk_curves(point_idx);
 
@@ -1229,7 +1232,7 @@ void Task_Tick(void)
             }
             uint8_t ci = k_area_patrol_route[s_wp_idx];
             const float *comp = (s_wp_idx == 0U) ? NULL : k_area_tilt_comp[ci];
-            int8_t from_ci = (s_wp_idx == 0U) ? -1 : (int8_t)k_area_patrol_route[s_wp_idx - 1U];
+            int8_t from_ci = (s_wp_idx == 0U) ? 2 : (int8_t)k_area_patrol_route[s_wp_idx - 1U];
             move_to_circle_angles(ci, comp, from_ci);
         } else if (wait_done()) {
             s_moving = 0;
@@ -1247,7 +1250,7 @@ void Task_Tick(void)
             }
             uint8_t ci = s_seq[s_wp_idx] - 1;  /* 1-based → 0-based */
             if (ci >= 5) ci = 0;
-            int8_t from_ci = -1;
+            int8_t from_ci = 2;
             if (s_wp_idx > 0U) {
                 uint8_t prev = s_seq[s_wp_idx - 1U] - 1U;
                 if (prev < 5U) {
