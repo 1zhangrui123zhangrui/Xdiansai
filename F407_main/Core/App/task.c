@@ -60,12 +60,47 @@ static const float k_area_tilt_comp[5][4] = {
 
 /* 任务2实测角点角度表: 每行对应圆1~圆5, 列为 ZDT ID1~ID4 绝对角度(°) */
 static const float k_circle_angles[5][4] = {
-    { -221.4f,  938.5f, -196.3f, -931.2f },  /* 圆1 */
-    { -864.9f,  274.5f,  932.6f,  217.9f },  /* 圆2 */
+    { -375.4f,  936.5f, -268.5f, -961.2f },  /* 圆1 */
+    { -928.0f,  253.5f,  919.6f,  219.9f },  /* 圆2 */
     {    0.0f,    0.0f,    0.0f,    0.0f },  /* 圆3: 中心 */
-    {  951.4f,  398.7f, -916.7f,  319.6f },  /* 圆4 */
-    { -296.5f, -906.1f, -350.0f,  923.0f },  /* 圆5 */
+    {  954.4f,  386.7f, -930.7f,  353.6f },  /* 圆4 */
+    { -315.5f, -929.1f, -237.7f,  897.4f },  /* 圆5 */
 };
+
+typedef struct {
+    float x;
+    float y;
+    float angles[4];
+    int8_t circle_idx;  /* 0~4=圆1~圆5, -1=非圆点边界点 */
+} AutoPatrolPoint_t;
+
+/* 自动巡逻实测边界端点: 5 条横向扫描线, 行内用角度插值运动 */
+static const AutoPatrolPoint_t k_auto_patrol_points[] = {
+    {-20.0f,  20.0f, {-375.4f,  936.5f, -268.5f, -961.2f}, 0},   /* 圆1 */
+    { 20.0f,  20.0f, {-928.0f,  253.5f,  919.6f,  219.9f}, 1},   /* 圆2 */
+    { 20.0f,  10.0f, {-647.1f, -129.0f,  706.7f,  322.8f}, -1},
+    {-20.0f,  10.0f, {  31.0f,  674.0f, -380.6f, -587.4f}, -1},
+    {-20.0f,   0.0f, { 313.2f,  509.0f, -515.9f, -274.7f}, -1},
+    { 20.0f,   0.0f, {-481.7f, -445.7f,  394.3f,  469.9f}, -1},
+    { 20.0f, -10.0f, {
+        -338.4f - AUTO_STRESS_RELIEF_DEG * MOTOR1_DIR_SIGN,
+        -743.3f - AUTO_STRESS_RELIEF_DEG * MOTOR2_DIR_SIGN,
+          68.0f - AUTO_STRESS_RELIEF_DEG * MOTOR3_DIR_SIGN,
+         683.6f - AUTO_STRESS_RELIEF_DEG * MOTOR4_DIR_SIGN}, -1},
+    {-20.0f, -10.0f, {
+         703.3f - AUTO_STRESS_RELIEF_DEG * MOTOR1_DIR_SIGN,
+         421.9f - AUTO_STRESS_RELIEF_DEG * MOTOR2_DIR_SIGN,
+        -740.1f - AUTO_STRESS_RELIEF_DEG * MOTOR3_DIR_SIGN,
+          69.6f - AUTO_STRESS_RELIEF_DEG * MOTOR4_DIR_SIGN}, -1},
+    {-20.0f, -20.0f, {
+         954.4f - AUTO_STRESS_RELIEF_DEG * MOTOR1_DIR_SIGN,
+         386.7f - AUTO_STRESS_RELIEF_DEG * MOTOR2_DIR_SIGN,
+        -930.7f - AUTO_STRESS_RELIEF_DEG * MOTOR3_DIR_SIGN,
+         353.6f - AUTO_STRESS_RELIEF_DEG * MOTOR4_DIR_SIGN}, 3},   /* 圆4 */
+    { 20.0f, -20.0f, {-315.5f, -929.1f, -237.7f,  897.4f}, 4},   /* 圆5 */
+};
+
+#define AUTO_PATROL_POINT_COUNT ((uint8_t)(sizeof(k_auto_patrol_points) / sizeof(k_auto_patrol_points[0])))
 
 /* ============================================================
  * 蛇形巡逻路点生成
@@ -136,7 +171,10 @@ static float       s_angle_path_pending_comp[4];
 static float       s_angle_path_start[4];
 static float       s_angle_path_target[4];
 static uint8_t     s_angle_path_slow_release[4];
+static uint8_t     s_angle_path_light_slow_release[4];
+static uint8_t     s_angle_path_light_fast_takeup[4];
 static uint8_t     s_angle_path_fast_takeup[4];
+static uint8_t     s_angle_path_slow_takeup[4];
 static float       s_angle_path_start_x = 0.0f;
 static float       s_angle_path_start_y = 0.0f;
 static float       s_angle_path_target_x = 0.0f;
@@ -164,6 +202,7 @@ static volatile uint8_t s_disable_pending = 0;
 
 static void move_to_laser(float lx, float ly);
 static void move_to_circle_angles(uint8_t circle_idx, const float comp_deg[4], int8_t from_circle_idx);
+static void move_to_auto_point(uint8_t point_idx);
 static uint8_t wait_done(void);
 static void sync_motor_angles_from_driver(void);
 static uint32_t estimate_motion_wait_ms(const float target_angles[4],
@@ -190,7 +229,10 @@ static void reset_motion_path(void)
     s_angle_path_pending_circle = 0;
     s_angle_path_pending_has_comp = 0;
     memset(s_angle_path_slow_release, 0, sizeof(s_angle_path_slow_release));
+    memset(s_angle_path_light_slow_release, 0, sizeof(s_angle_path_light_slow_release));
+    memset(s_angle_path_light_fast_takeup, 0, sizeof(s_angle_path_light_fast_takeup));
     memset(s_angle_path_fast_takeup, 0, sizeof(s_angle_path_fast_takeup));
+    memset(s_angle_path_slow_takeup, 0, sizeof(s_angle_path_slow_takeup));
 }
 
 static float motor_dir_sign_by_index(uint8_t i)
@@ -280,7 +322,10 @@ static uint8_t should_split_via_center(uint8_t from, uint8_t to)
 static void setup_edge_slow_release(int8_t from_circle_idx, uint8_t to_circle_idx)
 {
     memset(s_angle_path_slow_release, 0, sizeof(s_angle_path_slow_release));
+    memset(s_angle_path_light_slow_release, 0, sizeof(s_angle_path_light_slow_release));
+    memset(s_angle_path_light_fast_takeup, 0, sizeof(s_angle_path_light_fast_takeup));
     memset(s_angle_path_fast_takeup, 0, sizeof(s_angle_path_fast_takeup));
+    memset(s_angle_path_slow_takeup, 0, sizeof(s_angle_path_slow_takeup));
 
     if (from_circle_idx < 0) {
         return;
@@ -330,6 +375,101 @@ static void setup_edge_slow_release(int8_t from_circle_idx, uint8_t to_circle_id
         }
     }
 #endif
+}
+
+static void mark_slow_takeup_if_needed(uint8_t motor_idx)
+{
+    float delta = s_angle_path_target[motor_idx] - s_angle_path_start[motor_idx];
+    float takeup_delta = delta * motor_dir_sign_by_index(motor_idx);
+    if (takeup_delta > 0.1f) {
+        s_angle_path_slow_takeup[motor_idx] = 1U;
+    }
+}
+
+static void mark_slow_release_if_needed(uint8_t motor_idx)
+{
+    float delta = s_angle_path_target[motor_idx] - s_angle_path_start[motor_idx];
+    float takeup_delta = delta * motor_dir_sign_by_index(motor_idx);
+    if (takeup_delta < -0.1f) {
+        s_angle_path_slow_release[motor_idx] = 1U;
+    }
+}
+
+static void mark_fast_takeup_if_needed(uint8_t motor_idx)
+{
+    float delta = s_angle_path_target[motor_idx] - s_angle_path_start[motor_idx];
+    float takeup_delta = delta * motor_dir_sign_by_index(motor_idx);
+    if (takeup_delta > 0.1f) {
+        s_angle_path_fast_takeup[motor_idx] = 1U;
+    }
+}
+
+static void mark_light_slow_release_if_needed(uint8_t motor_idx)
+{
+    float delta = s_angle_path_target[motor_idx] - s_angle_path_start[motor_idx];
+    float takeup_delta = delta * motor_dir_sign_by_index(motor_idx);
+    if (takeup_delta < -0.1f) {
+        s_angle_path_light_slow_release[motor_idx] = 1U;
+    }
+}
+
+static void mark_light_fast_takeup_if_needed(uint8_t motor_idx)
+{
+    float delta = s_angle_path_target[motor_idx] - s_angle_path_start[motor_idx];
+    float takeup_delta = delta * motor_dir_sign_by_index(motor_idx);
+    if (takeup_delta > 0.1f) {
+        s_angle_path_light_fast_takeup[motor_idx] = 1U;
+    }
+}
+
+static void apply_auto_segment_release(uint8_t point_idx)
+{
+    if (point_idx == 5U) {  /* (-20,0)->(20,0): ID1/ID4 稍微松线 */
+        s_angle_path_target[0] -= AUTO_SEGMENT_RELEASE_DEG * MOTOR1_DIR_SIGN;
+        s_angle_path_target[3] -= AUTO_SEGMENT_RELEASE_DEG * MOTOR4_DIR_SIGN;
+    }
+}
+
+static void setup_auto_risk_curves(uint8_t point_idx)
+{
+    if (point_idx == 0U) {
+        return;
+    }
+
+    uint8_t prev = (uint8_t)(point_idx - 1U);
+
+    /* 经过 (20,-10) 附近时, ID2/ID3 收线稍慢一点 */
+    if (prev == 6U || point_idx == 6U) {
+        mark_slow_takeup_if_needed(1U);
+        mark_slow_takeup_if_needed(2U);
+    }
+
+    /* (-20,-10)->(-20,-20) 时, ID1/ID4 收线稍慢一点 */
+    if (prev == 7U && point_idx == 8U) {
+        mark_slow_takeup_if_needed(0U);
+        mark_slow_takeup_if_needed(3U);
+    }
+
+    /* (20,10)->(-20,10): ID4 收线快一点, ID2/ID3 放线稍慢一点 */
+    if (prev == 2U && point_idx == 3U) {
+        mark_fast_takeup_if_needed(3U);
+        mark_light_slow_release_if_needed(1U);
+        mark_light_slow_release_if_needed(2U);
+    }
+
+    /* (20,-10)->(-20,-10): ID4 收线快一点, ID3 放线慢一点 */
+    if (prev == 6U && point_idx == 7U) {
+        mark_fast_takeup_if_needed(3U);
+        mark_slow_release_if_needed(2U);
+    }
+
+    /* (-20,0)->(20,0): ID2/ID3 收线稍快一点点, ID1/ID4 放线稍慢一点点 */
+    if (prev == 4U && point_idx == 5U) {
+        mark_light_fast_takeup_if_needed(1U);
+        mark_light_fast_takeup_if_needed(2U);
+        mark_light_slow_release_if_needed(0U);
+        mark_light_slow_release_if_needed(3U);
+    }
 }
 
 static void enable_for_motion(void)
@@ -656,8 +796,14 @@ static void command_angle_path_segment(uint16_t seg_idx)
         float motor_t = t;
         if (s_angle_path_slow_release[i]) {
             motor_t = powf(t, AREA_EDGE_SLOW_RELEASE_POWER);
+        } else if (s_angle_path_light_slow_release[i]) {
+            motor_t = powf(t, AUTO_LIGHT_CURVE_POWER);
+        } else if (s_angle_path_slow_takeup[i]) {
+            motor_t = powf(t, AUTO_RISK_SLOW_TAKEUP_POWER);
         } else if (s_angle_path_fast_takeup[i]) {
             motor_t = 1.0f - powf(1.0f - t, AREA_EDGE_FAST_TAKEUP_POWER);
+        } else if (s_angle_path_light_fast_takeup[i]) {
+            motor_t = 1.0f - powf(1.0f - t, AUTO_LIGHT_CURVE_POWER);
         }
         target[i] = s_angle_path_start[i] +
                     (s_angle_path_target[i] - s_angle_path_start[i]) * motor_t;
@@ -763,6 +909,55 @@ static void move_to_circle_angles(uint8_t circle_idx, const float comp_deg[4], i
     command_angle_path_segment(1U);
 }
 
+static void move_to_auto_point(uint8_t point_idx)
+{
+    enable_for_motion();
+    sync_motor_angles_from_driver();
+
+    if (point_idx >= AUTO_PATROL_POINT_COUNT) {
+        point_idx = 0U;
+    }
+
+    const AutoPatrolPoint_t *p = &k_auto_patrol_points[point_idx];
+    for (uint8_t i = 0; i < 4; i++) {
+        s_angle_path_start[i] = s_motor_angle[i];
+        s_angle_path_target[i] = p->angles[i];
+    }
+    apply_auto_segment_release(point_idx);
+    s_angle_path_start_x = s_laser_x;
+    s_angle_path_start_y = s_laser_y;
+    s_angle_path_target_x = p->x;
+    s_angle_path_target_y = p->y;
+
+    memset(s_angle_path_slow_release, 0, sizeof(s_angle_path_slow_release));
+    memset(s_angle_path_light_slow_release, 0, sizeof(s_angle_path_light_slow_release));
+    memset(s_angle_path_light_fast_takeup, 0, sizeof(s_angle_path_light_fast_takeup));
+    memset(s_angle_path_fast_takeup, 0, sizeof(s_angle_path_fast_takeup));
+    memset(s_angle_path_slow_takeup, 0, sizeof(s_angle_path_slow_takeup));
+    if (point_idx > 0U) {
+        int8_t from_ci = k_auto_patrol_points[point_idx - 1U].circle_idx;
+        if (from_ci >= 0 && p->circle_idx >= 0) {
+            setup_edge_slow_release(from_ci, (uint8_t)p->circle_idx);
+        }
+    }
+    setup_auto_risk_curves(point_idx);
+
+    float max_delta = 0.0f;
+    for (uint8_t i = 0; i < 4; i++) {
+        float d = fabsf(s_angle_path_target[i] - s_angle_path_start[i]);
+        if (d > max_delta) {
+            max_delta = d;
+        }
+    }
+
+    s_angle_path_total = 1U;
+    if (ANGLE_SEGMENT_MAX_DEG > 0.1f && max_delta > ANGLE_SEGMENT_MAX_DEG) {
+        s_angle_path_total = (uint16_t)ceilf(max_delta / ANGLE_SEGMENT_MAX_DEG);
+    }
+    s_angle_path_active = 1U;
+    command_angle_path_segment(1U);
+}
+
 /** 等待电机运动完成：不依赖 ZDT 到位返回, 按估算时间推进 */
 static uint8_t wait_done(void)
 {
@@ -848,7 +1043,7 @@ void Task_StartAutoPatrol(void)
 {
     s_state    = TASK_AUTO_PATROL;
     s_wp_idx   = 0;
-    s_wp_total = s_snake_cnt;
+    s_wp_total = AUTO_PATROL_POINT_COUNT;
     s_fire_halt = 0;
     s_moving   = 0;
     reset_motion_path();
@@ -1069,22 +1264,16 @@ void Task_Tick(void)
 
     /* ---- AUTO_PATROL ---- */
     case TASK_AUTO_PATROL:
-        if (s_cl_active) {
-            if (closed_loop_tick()) {
-                HAL_Delay(PATROL_DWELL_MS);
-                s_wp_idx++;
-            }
-        } else if (!s_moving) {
+        if (!s_moving) {
             if (s_wp_idx >= s_wp_total) {
                 s_state = TASK_IDLE;
                 break;
             }
-            move_to_laser(s_snake[s_wp_idx][0],
-                          s_snake[s_wp_idx][1]);
+            move_to_auto_point(s_wp_idx);
         } else if (wait_done()) {
             s_moving = 0;
-            closed_loop_start(s_snake[s_wp_idx][0],
-                              s_snake[s_wp_idx][1]);
+            HAL_Delay(PATROL_DWELL_MS);
+            s_wp_idx++;
         }
         break;
     }

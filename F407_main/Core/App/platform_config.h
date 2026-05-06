@@ -116,8 +116,8 @@
  * 电机运动参数 (X 固件梯形曲线加减速位置模式)
  * ============================================================ */
 #define MOTOR_SPEED_RPM         40U     /* 最大速度 (RPM, 0-3000) */
-#define MOTOR_ACCEL_RPMS        40U     /* 加速加速度 (RPM/S, 0-65535) */
-#define MOTOR_DECEL_RPMS        40U     /* 减速加速度 (RPM/S, 0-65535) */
+#define MOTOR_ACCEL_RPMS        50U     /* 加速加速度 (RPM/S, 0-65535) */
+#define MOTOR_DECEL_RPMS        50U     /* 减速加速度 (RPM/S, 0-65535) */
 
 /* 上电是否把当前电机位置记录为 0 度
  * 1=上电自动清零: 只在手动把激光点放到中心后用于建立零点。
@@ -162,15 +162,19 @@
 #define COORD_UPDATE_INTERVAL_MS    100U
 #define PATROL_DWELL_MS             300U
 #define MOTION_SEGMENT_STEP_CM      1.0f
-#define ANGLE_SEGMENT_MAX_DEG       10.0f
+#define ANGLE_SEGMENT_MAX_DEG       30.0f
 #define AREA_TILT_COMP_DEG          0.0f
 #define AREA_EDGE_SLOW_RELEASE_ENABLE  1U
 #define AREA_EDGE_SLOW_RELEASE_POWER   2.0f
 #define AREA_EDGE_FAST_TAKEUP_ENABLE   1U
 #define AREA_EDGE_FAST_TAKEUP_POWER    2.0f
 #define AREA_SIDE_CURVE_ENABLE         1U
-#define MOTION_SEGMENT_MIN_WAIT_MS  120U
-#define MOTION_SEGMENT_MARGIN_MS    80U
+#define AUTO_STRESS_RELIEF_DEG         15.0f
+#define AUTO_RISK_SLOW_TAKEUP_POWER    1.4f
+#define AUTO_SEGMENT_RELEASE_DEG       8.0f
+#define AUTO_LIGHT_CURVE_POWER         1.25f
+#define MOTION_SEGMENT_MIN_WAIT_MS  60U
+#define MOTION_SEGMENT_MARGIN_MS    25U
 #define AUTO_PATROL_STEP_CM         10.0f
 #define AUTO_PATROL_X_MIN_CM        (-20.0f)
 #define AUTO_PATROL_X_MAX_CM        ( 20.0f)
